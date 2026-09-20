@@ -133,7 +133,8 @@ package Logistics_Module.Demand_Cells is
      Pre => Delta_s >= 0.0;
 
    -- First line: # run_id=ISO Time_Rate=… AU_m=… c_m_s=…
-   -- then SI header; subsequent Life_Ticks append cell×species rows.
+   -- then SI header (+ ATC cols Fleet_In_Flight,Lane_Capacity,Assign_Rejected);
+   -- subsequent Life_Ticks append cell×species rows (ATC zeros from Fitness path).
    procedure Begin_Sim_Run
      (Time_Rate : Float;
       Path      : String := Sim_Log_Path;

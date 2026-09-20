@@ -1183,6 +1183,19 @@ package body Logistics_Module is
       end case;
    end Haul_To_Dispatch;
 
+
+   procedure Mark_Rejected_ATC (C : in out Company; Order : Order_Id) is
+      O : Order_Record;
+   begin
+      if Natural (Order) > C.O_Count then
+         return;
+      end if;
+      O := C.Orders (Order);
+      if O.Status in Pending | Accepted then
+         C.Orders (Order).Status := Rejected_ATC;
+      end if;
+   end Mark_Rejected_ATC;
+
    procedure Assign_Vehicle
      (C          : in out Company;
       Order      : Order_Id;

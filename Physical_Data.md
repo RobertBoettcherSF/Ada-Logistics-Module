@@ -127,3 +127,16 @@ Pre: `Cruise_Speed_m_s < c_m_s`.
 `Life_Tick`: under-served → spawn/prefer higher Fitness; over-served → cull lower.
 Each tick appends `sim_run.csv`: comment `# run_id=…` then header
 `t_s,cell_id,…,beta,c_m_s`; one row per cell×species.
+
+## ATC corridors (lean SI, separate from Fitness)
+
+| Haul_Mode | Separation_m | Lane_Capacity |
+|-----------|--------------|---------------|
+| Road | 100 | floor(Distance_m / Separation_m), ≥ 1 |
+| Tunnel | 50 | floor(Distance_m / Separation_m), ≥ 1 |
+| Space_Haul | ≥ 50_000 | min(8, floor(Distance_m / Separation_m)), ≥ 1 |
+
+`Min_Slot_Spacing_s = Separation_m / Cruise_Speed_m_s` (docs/tests).
+
+Assign gate: `Fleet_In_Flight >= Lane_Capacity` → `Rejected_ATC` / reject.
+`sim_run.csv` logs `Fleet_In_Flight`, `Lane_Capacity`, `Assign_Rejected`.

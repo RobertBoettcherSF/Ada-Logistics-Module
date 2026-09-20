@@ -8,6 +8,8 @@ with Ada.Strings.Fixed;
 with Logistics_Module; use Logistics_Module;
 with Logistics_Module.Demand_Cells;
 use Logistics_Module.Demand_Cells;
+with Logistics_Module.ATC;
+use Logistics_Module.ATC;
 
 procedure Tests is
    Failed : Natural := 0;
@@ -802,6 +804,133 @@ begin
       On_Demand_Birth (Cell);
       On_Demand_Death (Cell);
       Check (True, "demand birth/death stubs callable");
+   end;
+
+
+   ------------------------------------------------------------------
+   -- ATC: lane capacity / separation (separate from Fitness)
+   ------------------------------------------------------------------
+   declare
+      Pc     : Company;
+      Ca, Cb : City_Id;
+      V1, V2, V3 : Vehicle_Id;
+      O1, O2, O3 : Order_Id;
+      Ok     : Boolean;
+      Lane   : Traffic_Lane;
+      Cap    : Positive;
+   begin
+      Check (Default_Separation_m (Road) = 100.0, "ATC Road Separation_m 100");
+      Check (Default_Separation_m (Tunnel) = 50.0, "ATC Tunnel Separation_m 50");
+      Check (Default_Separation_m (Space_Haul) = 50_000.0,
+             "ATC Space_Haul Separation_m 50000");
+      Check (Space_Haul_Capacity_Cap = 8, "ATC Space_Haul capacity cap 8");
+
+      Cap := Capacity_From_Corridor (1_000.0, 100.0, Road);
+      Check (Cap = 10, "ATC Road capacity from corridor 1000/100");
+      Cap := Capacity_From_Corridor (500.0, 50.0, Tunnel);
+      Check (Cap = 10, "ATC Tunnel capacity from corridor 500/50");
+      Cap := Capacity_From_Corridor (400_000.0, 50_000.0, Space_Haul);
+      Check (Cap = 8, "ATC Space capacity 400k/50k → 8");
+      Cap := Capacity_From_Corridor (500_000.0, 50_000.0, Space_Haul);
+      Check (Cap = 8, "ATC Space capacity hard-capped at 8");
+      Cap := Capacity_From_Corridor (50_000.0, 50_000.0, Space_Haul);
+      Check (Cap = 1, "ATC Space capacity 50k/50k → 1");
+
+      Check (Min_Slot_Spacing_s (50_000.0, 3_000.0) = 50_000.0 / 3_000.0,
+             "ATC Min_Slot_Spacing_s Space_Haul");
+      Check (Min_Slot_Spacing_s (100.0, 22.0) = 100.0 / 22.0,
+             "ATC Min_Slot_Spacing_s Road");
+
+      -- Below capacity OK; fill to capacity; next assign fails → Rejected_ATC
+      Pc := Create_Company (20_000.00);
+      Add_City (Pc, "PortA", False, False, True, Id => Ca);
+      Add_City (Pc, "PortB", False, False, True, Id => Cb);
+      Add_Vehicle (Pc, Light_Van, Container, True, 4, 1_000.00, V1, Ok);
+      Add_Vehicle (Pc, Light_Van, Container, True, 4, 1_000.00, V2, Ok);
+      Add_Vehicle (Pc, Light_Van, Container, True, 4, 1_000.00, V3, Ok);
+      Check (Ok, "ATC fleet vans");
+
+      -- Capacity 2 corridor (explicit) — Space_Haul sep lock
+      Lane := Make_Lane (Ca, Cb, Space_Haul, 200_000.0, Lane_Capacity => 2);
+      Check (Lane.Separation_m = 50_000.0, "Make_Lane Space sep lock 50k");
+      Check (Lane.Lane_Capacity = 2, "Make_Lane explicit capacity 2");
+      Check (Lane.Fleet_In_Flight = 0, "lane starts empty");
+
+      Create_Order (Pc, Ca, Cb, Container_Cargo, 1, 100.00, O1, Ok);
+      Create_Order (Pc, Ca, Cb, Container_Cargo, 1, 100.00, O2, Ok);
+      Create_Order (Pc, Ca, Cb, Container_Cargo, 1, 100.00, O3, Ok);
+
+      Assign_On_Lane (Pc, Lane, O1, V1, 200_000.0, Space_Haul, Ok);
+      Check (Ok, "ATC assign below capacity OK");
+      Check (Lane.Fleet_In_Flight = 1, "Fleet_In_Flight 1 after first");
+      Check (Get_Order (Pc, O1).Status = En_Route, "first En_Route");
+
+      Assign_On_Lane (Pc, Lane, O2, V2, 200_000.0, Space_Haul, Ok);
+      Check (Ok, "ATC assign at last slot OK");
+      Check (Lane.Fleet_In_Flight = 2, "Fleet_In_Flight at capacity");
+      Check (At_Capacity (Lane), "lane At_Capacity");
+
+      Assign_On_Lane (Pc, Lane, O3, V3, 200_000.0, Space_Haul, Ok);
+      Check (not Ok, "ATC assign over capacity fails");
+      Check (Get_Order (Pc, O3).Status = Rejected_ATC, "status Rejected_ATC");
+      Check (Lane.Assign_Rejected = 1, "Assign_Rejected counted");
+      Check (Lane.Fleet_In_Flight = 2, "Fleet_In_Flight unchanged on reject");
+
+      -- Exception path
+      begin
+         Occupy_Or_Raise (Lane);
+         Check (False, "Occupy_Or_Raise should raise");
+      exception
+         when ATC_Capacity_Exceeded =>
+            Check (True, "Occupy_Or_Raise raises ATC_Capacity_Exceeded");
+      end;
+
+      Release_After_Delivery (Lane);
+      Check (Lane.Fleet_In_Flight = 1, "Release frees one slot");
+      Assign_On_Lane (Pc, Lane, O3, V3, 200_000.0, Space_Haul, Ok);
+      -- O3 was Rejected_ATC — Assign_Vehicle only accepts Pending|Accepted
+      Check (not Ok, "Rejected_ATC order not re-assignable without new order");
+
+      declare
+         O4 : Order_Id;
+      begin
+         Create_Order (Pc, Ca, Cb, Container_Cargo, 1, 50.00, O4, Ok);
+         Assign_On_Lane (Pc, Lane, O4, V3, 200_000.0, Space_Haul, Ok);
+         Check (Ok, "after Release, assign below capacity OK");
+         Check (Lane.Fleet_In_Flight = 2, "back at capacity");
+      end;
+
+      -- Road corridor capacity from length
+      Lane := Make_Lane (Ca, Cb, Road, 200.0);
+      Check (Lane.Separation_m = 100.0, "Road Make_Lane sep 100");
+      Check (Lane.Lane_Capacity = 2, "Road 200/100 capacity 2");
+      Check (abs (Min_Slot_Spacing_s (Lane) - 100.0 / 22.0) < 1.0e-5,
+             "Road Min_Slot_Spacing_s via lane");
+
+      -- Log ATC columns to sim_run
+      declare
+         Log_Path : constant String := "obj/sim_run_atc_test.csv";
+         F : File_Type;
+         Buf : String (1 .. 512);
+         Last : Natural;
+         Found : Boolean := False;
+      begin
+         if Ada.Directories.Exists (Log_Path) then
+            Ada.Directories.Delete_File (Log_Path);
+         end if;
+         Log_Lane_State (Lane, T_s => 1.0, Path => Log_Path);
+         Open (F, In_File, Log_Path);
+         while not End_Of_File (F) loop
+            Get_Line (F, Buf, Last);
+            if Ada.Strings.Fixed.Index
+                 (Buf (1 .. Last), "Fleet_In_Flight") > 0
+            then
+               Found := True;
+            end if;
+         end loop;
+         Close (F);
+         Check (Found, "ATC sim_run logs Fleet_In_Flight header");
+      end;
    end;
 
    New_Line;

@@ -242,7 +242,8 @@ package body Logistics_Module.Demand_Cells is
         (F,
          "t_s,cell_id,Demand_Rate_kg_s,Stock_kg,Deficit_kg,species,"
          & "Ship_Count,Cruise_Speed_m_s,Cargo_Mass_kg,Gross_Mass_kg,"
-         & "Distance_m,Transit_Duration_s,Throughput_kg_s,Fitness,beta,c_m_s");
+         & "Distance_m,Transit_Duration_s,Throughput_kg_s,Fitness,beta,c_m_s,"
+         & "Fleet_In_Flight,Lane_Capacity,Assign_Rejected");
       Close (F);
       Run_Open := True;
       Run_Len := Natural'Min (Path'Length, Run_Path'Length);
@@ -296,7 +297,11 @@ package body Logistics_Module.Demand_Cells is
          Put_Sci (F, Thr); Put (F, ',');
          Put_Sci (F, Fit); Put (F, ',');
          Put_Sci (F, B); Put (F, ',');
-         Put (F, Trim_Img (c_m_s'Image));
+         Put (F, Trim_Img (c_m_s'Image)); Put (F, ',');
+         -- ATC columns (Fitness path logs zeros; ATC package logs real lane SI)
+         Put (F, '0'); Put (F, ',');
+         Put (F, '0'); Put (F, ',');
+         Put (F, '0');
          New_Line (F);
       end loop;
       Close (F);

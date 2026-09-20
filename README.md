@@ -94,6 +94,22 @@ Evolutionary fleet (DS SI): `c_m_s`, `AU_m`; species `Barge_Inner` /
 `Fast_Courier` / `Relativistic_Stub` (β≤0.01); cruise &lt; c; Fitness =
 Throughput/(ships×gross); `Life_Tick` spawn/prefer/cull by Fitness; appends `sim_run.csv` (cell×species SI rows).
 
+### ATC (child package) — separate from Fitness
+
+Lean air/space traffic control SI (not mixed with evolutionary Fitness):
+
+| Field | Meaning |
+|-------|---------|
+| `Lane_Id` / corridor | Between cities or spaceports |
+| `Lane_Capacity` | Positive — max ships in flight on that lane |
+| `Separation_m` | Lean minimum separation |
+| `Fleet_In_Flight` | Current occupied slots |
+| `Assign_Rejected` | Count of capacity rejects |
+
+**LOCK defaults:** Space_Haul `Separation_m` ≥ **50_000**, `Lane_Capacity` hard cap **8** (or `floor(Distance/Separation)` capped at 8). Road `Separation_m` **100**, Tunnel **50**; capacity from corridor length. Optional `Min_Slot_Spacing_s = Separation_m / Cruise_Speed_m_s`.
+
+On `Assign_On_Lane` / spawn: if `Fleet_In_Flight(lane) >= Lane_Capacity` → reject (`Rejected_ATC` or `ATC_Capacity_Exceeded`). `sim_run.csv` columns: `Fleet_In_Flight`, `Lane_Capacity`, `Assign_Rejected`.
+
 ## Build
 
 ```bash

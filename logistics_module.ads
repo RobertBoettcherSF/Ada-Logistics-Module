@@ -420,7 +420,8 @@ package Logistics_Module is
 
    type Staff_Role is (Dispatcher, Driver, Mechanic, Clerk, Manager);
    type Order_Status is
-     (Pending, Accepted, In_Transit, En_Route, Delivered, Cancelled);
+     (Pending, Accepted, In_Transit, En_Route, Delivered, Cancelled,
+      Rejected_ATC);
    type Offer_Status is (Open, Accepted_Offer, Declined, Expired);
 
    type Vehicle_Record is record
@@ -695,6 +696,9 @@ package Logistics_Module is
       Now        : Ada.Calendar.Time := Ada.Calendar.Clock)
    with
      Pre => Distance_m >= 0.0;
+
+   -- ATC capacity reject: Pending/Accepted → Rejected_ATC (not Fitness)
+   procedure Mark_Rejected_ATC (C : in out Company; Order : Order_Id);
 
    -- Wall Δt * Time_Rate → Elapsed_s; deliver when Elapsed_s >= ETA_s
    procedure Tick

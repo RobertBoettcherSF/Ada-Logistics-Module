@@ -14,7 +14,7 @@ Inspired by the public logistics-sim genre only.
 | **Body_Kind** | `Silo`, `Tank`, `Reefer`, `Flatbed`, `Container`, `Lowboy` |
 | **EU_Vehicle_Class** | `M1`–`M3`, `N1`–`N3`, `O1`–`O4` — inspired by EU vehicle categories VO 2018/858 |
 | **EU_Class_M1** | `Car_Small`, `Car_Medium`, `Car_Large` (passenger size tags) |
-| **Physical** | `Mass_Kilograms`, `GVW_Kilograms`, `Footprint_Length_m`, `Footprint_Width_m` — see [Physical_Data.md](Physical_Data.md) |
+| **Physical** | `Mass_Kilograms`, `GVW_Kilograms`, `Footprint_Length_m`, `Footprint_Width_m` — see [Physical_Data.md](Physical_Data.md), [SI_Units.md](SI_Units.md) |
 | **Cargo_Class** | Silo / Tank / Lowboy / Reefer / Flatbed / Container / Dry_Box |
 | **Cargo_Kind** | `Food_Dry`, `Food_Cold`, `Cosmetics`, `Pharma_Cold` (density / T / hazard lean) |
 | **Position_m** | Hub SI `(X,Y,Z)`; origin `Terra_0` |

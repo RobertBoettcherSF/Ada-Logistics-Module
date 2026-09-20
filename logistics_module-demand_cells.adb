@@ -461,7 +461,32 @@ package body Logistics_Module.Demand_Cells is
          elsif not Ada.Directories.Exists (Path) then
             Begin_Sim_Run (Time_Rate, Path);
          end if;
-         Append_Sim_Rows (Cell, T_s, Path);
+         declare
+            Scores  : Species_Scores := [others => 0.0];
+            Rewards : Species_Rewards := [others => 0.0];
+            Fuel    : Species_Fuel := [others => 0.0];
+            Payload : Species_Payload := [others => 0.0];
+            Ref     : Float;
+         begin
+            -- SI-audit: expose Fuel_Mass_kg / Score_kg_s on evo path too
+            if Cell.Distance_m > 0.0 then
+               Ref := Score_Ref_kg_s (Cell.Distance_m);
+               for S in Fleet_Species loop
+                  Fuel (S) := Fuel_Mass_kg (S);
+                  Payload (S) := Payload_Net_kg (S);
+                  Scores (S) := Score_kg_s (S, Cell.Distance_m);
+                  if Ref > 0.0 then
+                     Rewards (S) := Reward_Coin (S, Cell.Distance_m, Ref);
+                  end if;
+               end loop;
+            end if;
+            Append_Sim_Rows
+              (Cell, T_s, Path,
+               Scores  => Scores,
+               Rewards => Rewards,
+               Fuel    => Fuel,
+               Payload => Payload);
+         end;
       end if;
    end Life_Tick;
 

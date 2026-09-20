@@ -156,6 +156,8 @@ Lean stubs: `Moon_Polar` ≈ 3.84×10⁸ m; `Mars` ≈ 2.25×10¹¹ m; Venus/Tit
 | Demand_Rate_kg_s | Crew × kg/day / 86400 |
 | Min_Cruise_Speed_m_s | Demand × 2 × Distance / Cargo |
 
+See also [SI_Units.md](SI_Units.md) (shared Ada naming pattern).
+
 ## Tournament score (fuel-adjusted)
 
 | Symbol | Formula |
@@ -168,3 +170,5 @@ Lean stubs: `Moon_Polar` ≈ 3.84×10⁸ m; `Mars` ≈ 2.25×10¹¹ m; Venus/Tit
 | Speed_Ref_m_s | Barge_Inner cruise (3000) |
 
 Score_Ref from Barge_Inner at ref distance. Cruise still < c. Extreme speed can lower Score vs mid due to fuel.
+
+`Life_Tick` (evo) and `Run_Tournament_Ticks` both write `Fuel_Mass_kg`, `Payload_Net_kg`, `Score_kg_s`, `Reward_Coin` into `sim_run.csv` for SI-audit.

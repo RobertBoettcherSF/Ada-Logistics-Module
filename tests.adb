@@ -798,6 +798,16 @@ begin
          Check (Ada.Strings.Fixed.Index
                   (Buf (1 .. Last), "t_s,cell_id,Demand_Rate_kg_s") = 1,
                 "sim_run SI header");
+         Check (Ada.Strings.Fixed.Index (Buf (1 .. Last), "Fuel_Mass_kg") > 0
+                  and then
+                Ada.Strings.Fixed.Index (Buf (1 .. Last), "Score_kg_s") > 0,
+                "sim_run SI-audit Fuel_Mass_kg+Score_kg_s");
+         -- data row has non-zero fuel for Fast_Courier when Distance>0
+         Get_Line (F, Buf, Last);
+         Check (Ada.Strings.Fixed.Index (Buf (1 .. Last), "E+") > 0
+                  or else Ada.Strings.Fixed.Index (Buf (1 .. Last), "E-") > 0
+                  or else Ada.Strings.Fixed.Index (Buf (1 .. Last), ".") > 0,
+                "sim_run data row numeric SI");
          Close (F);
       end;
 

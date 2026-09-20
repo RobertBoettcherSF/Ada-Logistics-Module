@@ -42,14 +42,14 @@ begin
    Check (Compatible (Reefer_Cargo, Reefer, Road)
             and then not Compatible (Reefer_Cargo, Reefer, Rail),
           "reefer road only");
-   Check (Compatible (Container_Cargo, Container, Space), "container space");
-   Check (not Compatible (Flatbed_Cargo, Flatbed, Space), "flatbed not space");
+   Check (Compatible (Container_Cargo, Container, Space_Haul), "container space_haul");
+   Check (not Compatible (Flatbed_Cargo, Flatbed, Space_Haul), "flatbed not space_haul");
 
    Check (Mode_Allows_Hazard (Road, Explosives), "road allows explosives");
    Check (not Mode_Allows_Hazard (Air, Explosives), "air denies explosives");
-   Check (not Mode_Allows_Hazard (Space, Radioactive), "space denies radioactive");
+   Check (not Mode_Allows_Hazard (Space_Haul, Radioactive), "space_haul denies radioactive");
    Check (Mode_Allows_Hazard (Air, Flammable_Liquids), "air allows flammable liquids");
-   Check (Mode_Allows_Hazard (Space, Corrosive), "space allows corrosive");
+   Check (Mode_Allows_Hazard (Space_Haul, Corrosive), "space_haul allows corrosive");
    Check (Requires_Tank_Body (Gases)
             and then Requires_Tank_Body (Flammable_Liquids)
             and then not Requires_Tank_Body (Explosives),
@@ -59,19 +59,19 @@ begin
       Time_Img : constant String := Space_Time_Factor'Image;
    begin
       Check (Cost_Img'Length > 0 and then Time_Img'Length > 0,
-             "space cost/time factors present");
+             "space_haul cost/time factors present");
    end;
 
    ------------------------------------------------------------------
    -- Company / cities
    ------------------------------------------------------------------
    C := Create_Company (80_000.00, 5);
-   Add_City (C, "Alpha", True, True, False, A);
-   Add_City (C, "Beta", True, True, False, B);
+   Add_City (C, "Alpha", True, True, False, Id => A);
+   Add_City (C, "Beta", True, True, False, Id => B);
    City := Get_City (C, A);
    Check (City.Has_Rail and then not City.Has_Spaceport, "city rail always");
-   Add_City (C, "OrbitGate", True, False, True, Sp1);
-   Add_City (C, "LunaDock", False, False, True, Sp2);
+   Add_City (C, "OrbitGate", True, False, True, Id => Sp1);
+   Add_City (C, "LunaDock", False, False, True, Id => Sp2);
 
    ------------------------------------------------------------------
    -- Fleet
@@ -162,21 +162,21 @@ begin
    Create_Order (C, Sp1, Sp2, Container_Cargo, 3, 5_000.00, Oid, Ok);
    Make_Offer (C, Oid, 5_000.00, Off, Ok);
    Accept_Offer (C, Off, Ok);
-   Dispatch_Order (C, Oid, Space, Success => Ok);
-   Check (Ok, "space container like air gate");
+   Dispatch_Order (C, Oid, Space_Haul, Success => Ok);
+   Check (Ok, "space_haul container like air gate");
    Complete_Delivery (C, Oid, Ok);
 
    Create_Order (C, Sp1, Sp2, Flatbed_Cargo, 2, 100.00, Oid, Ok);
    Make_Offer (C, Oid, 100.00, Off, Ok);
    Accept_Offer (C, Off, Ok);
-   Dispatch_Order (C, Oid, Space, Success => Ok);
-   Check (not Ok, "space non-container rejected");
+   Dispatch_Order (C, Oid, Space_Haul, Success => Ok);
+   Check (not Ok, "space_haul non-container rejected");
 
    Create_Order (C, A, B, Container_Cargo, 1, 100.00, Oid, Ok);
    Make_Offer (C, Oid, 100.00, Off, Ok);
    Accept_Offer (C, Off, Ok);
-   Dispatch_Order (C, Oid, Space, Success => Ok);
-   Check (not Ok, "space without spaceports");
+   Dispatch_Order (C, Oid, Space_Haul, Success => Ok);
+   Check (not Ok, "space_haul without spaceports");
 
    ------------------------------------------------------------------
    -- Hazard rejects: Air/Space explosives; Road without ADR; tank body
@@ -191,16 +191,16 @@ begin
    Accept_Offer (C, Off, Ok);
    Dispatch_Order (C, Oid, Air, Success => Ok);
    Check (not Ok, "air rejects explosives");
-   Dispatch_Order (C, Oid, Space, Success => Ok);
-   Check (not Ok, "space rejects explosives");
+   Dispatch_Order (C, Oid, Space_Haul, Success => Ok);
+   Check (not Ok, "space_haul rejects explosives");
 
    Create_Order
      (C, Sp1, Sp2, Container_Cargo, 1, 200.00, Oid, Ok,
       Hazard => Radioactive, Placard => "70/XXXX ");
    Make_Offer (C, Oid, 200.00, Off, Ok);
    Accept_Offer (C, Off, Ok);
-   Dispatch_Order (C, Oid, Space, Success => Ok);
-   Check (not Ok, "space rejects radioactive");
+   Dispatch_Order (C, Oid, Space_Haul, Success => Ok);
+   Check (not Ok, "space_haul rejects radioactive");
 
    -- Hazardous road without ADR-approved vehicle
    Create_Order
@@ -239,6 +239,120 @@ begin
       Accept_Offer (C, Off, Ok);
       Dispatch_Order (C, Oid, Road, Vehicle => Flat_ADR, Success => Ok);
       Check (not Ok, "gases require tank body");
+   end;
+
+   ------------------------------------------------------------------
+   -- Tunnel cargo + ambient lean + hazard premiums + cover legs
+   ------------------------------------------------------------------
+   declare
+      T1, T2 : City_Id;
+      Sel    : Cover_Selection;
+      PF     : Premium_Multiplier;
+      City_T : City_Record;
+   begin
+      Add_City
+        (C, "TunnelNorth", False, False,
+         Has_Tunnel => True, Tunnel_Fire_Vent_Risk => True, Id => T1);
+      Add_City
+        (C, "TunnelSouth", False, False,
+         Has_Tunnel => True, Tunnel_Fire_Vent_Risk => False, Id => T2);
+      City_T := Get_City (C, T1);
+      Check (City_T.Has_Tunnel and then City_T.Tunnel_Fire_Vent_Risk,
+             "tunnel city fire/vent lean");
+
+      Check (Compatible (Silo_Cargo, Silo, Tunnel), "silo tunnel like road");
+      Check (Compatible (Container_Cargo, Container, Tunnel),
+             "container tunnel");
+      Check (Mode_Allows_Hazard (Tunnel, Explosives),
+             "tunnel allows explosives");
+
+      Check (Ambient_For (Road).Cabin_Pressure_kPa = 101.0
+               and then Ambient_For (Road).Gravity_g = 1.0,
+             "ambient road lean");
+      Check (Ambient_For (Tunnel).Rad_uSv_Per_h_Lo = 0.05
+               and then Ambient_For (Tunnel).Rad_uSv_Per_h_Hi = 0.2,
+             "ambient tunnel rad band");
+      Check (Ambient_For (Space_Haul).Ext_Pressure_kPa = 0.0
+               and then Ambient_For (Space_Haul).Gravity_g = 0.0
+               and then Ambient_For (Space_Haul).Rad_uSv_Per_h_Lo = 50.0
+               and then Ambient_For (Space_Haul).Rad_uSv_Per_h_Hi = 100.0,
+             "ambient space_haul lean");
+
+      Check (Band_Of (None) = Hazard_Premium_Band'(None), "band none");
+      Check (Band_Of (Misc_Dangerous) = Low, "band low misc");
+      Check (Band_Of (Flammable_Liquids) = Mid, "band mid flammable");
+      Check (Band_Of (Flammable_Solids) = Mid, "band mid solids");
+      Check (Band_Of (Oxidizers) = Mid, "band mid oxidizers");
+      Check (Band_Of (Gases) = High, "band high gases");
+      Check (Band_Of (Toxic_Infectious) = High, "band high toxic");
+      Check (Band_Of (Corrosive) = High, "band high corrosive");
+      Check (Band_Of (Explosives) = Extreme, "band extreme explosives");
+      Check (Band_Of (Radioactive) = Extreme, "band extreme radioactive");
+
+      Check (Base_Band_Factor (Hazard_Premium_Band'(None)) = 1.0,
+             "table None 1.0");
+      Check (Base_Band_Factor (Low) = 1.2, "table Low 1.2");
+      Check (Base_Band_Factor (Mid) = 2.0, "table Mid 2.0");
+      Check (Base_Band_Factor (High) = 4.0, "table High 4.0");
+      Check (Base_Band_Factor (Extreme) = 10.0, "table Extreme 10.0");
+
+      Check (Premium_Factor (None, Road) = 1.0, "PF none road");
+      Check (Premium_Factor (Misc_Dangerous, Road) = 1.2, "PF low");
+      Check (Premium_Factor (Flammable_Liquids, Tunnel) = 2.0, "PF mid");
+      Check (Premium_Factor (Gases, Space_Haul) = 4.0, "PF high no mode extra");
+      Check (Premium_Factor (Explosives, Road) = 10.0,
+             "PF extreme road 10");
+      Check (Premium_Factor (Explosives, Tunnel) = 12.0,
+             "PF extreme tunnel 10*1.2");
+      Check (Premium_Factor (Radioactive, Space_Haul) = 15.0,
+             "PF extreme space 10*1.5");
+
+      Check (Cover_Leg_Factor (Cargo_Loss) = 1.0, "cover cargo 1.0");
+      Check (Cover_Leg_Factor (Hull_Loss) = 0.6, "cover hull 0.6");
+      Check (Cover_Leg_Factor (Crew_Loss) = 0.8, "cover crew 0.8");
+      Check (Cover_Leg_Factor (Crew_Sick) = 0.25, "cover sick 0.25");
+      Check (Cover_Leg_Factor (Emergency_Leave) = 0.10, "cover emerg 0.10");
+
+      Sel := Empty_Cover;
+      Sel (Cargo_Loss) := True;
+      Check (Selected_Cover_Sum (Sel) = 1.0, "sum cargo only");
+      Sel (Hull_Loss) := True;
+      Check (Selected_Cover_Sum (Sel) = 1.6, "sum cargo+hull");
+      Check (Selected_Cover_Sum (Full_Cover) = 2.75, "sum full covers");
+
+      -- Total = sum(legs) × hazard×mode
+      PF := Total_Premium_Factor (Explosives, Space_Haul, Sel);
+      Check (PF = 1.6 * 15.0, "total cargo+hull × extreme space");
+      PF := Total_Premium_Factor (None, Road, Full_Cover);
+      Check (PF = 2.75 * 1.0, "total full × none");
+      PF := Total_Premium_Factor (Gases, Tunnel, Full_Cover);
+      Check (PF = 2.75 * 4.0, "total full × high tunnel");
+
+      -- Claim_Event stub literals exist
+      Check (Claim_Event'Pos (Claim_Cargo_Lost) =
+               Claim_Event'Pos (Claim_Event'First),
+             "claim stub cargo first");
+      Check (Claim_Event'Pos (Claim_Emergency_Leave) =
+               Claim_Event'Pos (Claim_Event'Last),
+             "claim stub emergency last");
+
+      -- Tunnel dispatch with EU fleet (artic silo re-attach)
+      Attach_Body (C, Tid, Silo, 20, Ok);
+      Check (Ok, "reattach silo for tunnel");
+      Create_Order (C, T1, T2, Silo_Cargo, 8, 1_100.00, Oid, Ok);
+      Make_Offer (C, Oid, 1_100.00, Off, Ok);
+      Accept_Offer (C, Off, Ok);
+      Dispatch_Order (C, Oid, Tunnel, Vehicle => Tid, Success => Ok);
+      Check (Ok, "tunnel silo artic");
+      Complete_Delivery (C, Oid, Ok);
+      Check (Ok, "tunnel delivered");
+
+      -- Tunnel denied without Has_Tunnel at both ends
+      Create_Order (C, A, B, Container_Cargo, 1, 50.00, Oid, Ok);
+      Make_Offer (C, Oid, 50.00, Off, Ok);
+      Accept_Offer (C, Off, Ok);
+      Dispatch_Order (C, Oid, Tunnel, Vehicle => 1, Success => Ok);
+      Check (not Ok, "tunnel without Has_Tunnel rejected");
    end;
 
    ------------------------------------------------------------------

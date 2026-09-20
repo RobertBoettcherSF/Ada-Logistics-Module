@@ -2,7 +2,8 @@
 --  Inspired by the public logistics-sim genre only.
 --  Our types: fleet, bodies, cargo matrix, cities/facilities, FE,
 --  ADR-inspired hazard classes (not legal text), EU vehicle classes
---  (inspired by EU vehicle categories VO 2018/858). No proprietary assets.
+--  (inspired by EU vehicle categories VO 2018/858), haul ambient,
+--  hazard insurance premiums + cover legs. No proprietary assets.
 
 pragma Ada_2022;
 
@@ -148,7 +149,7 @@ package Logistics_Module is
      (Silo_Cargo, Tank_Cargo, Lowboy_Cargo, Reefer_Cargo,
       Flatbed_Cargo, Container_Cargo);
 
-   type Dispatch_Mode is (Road, Rail, Sea, Air, Space);
+   type Dispatch_Mode is (Road, Rail, Sea, Air, Space_Haul, Tunnel);
 
    -- ADR-inspired lean classes 1–9 + None (clean-room; not legal copy)
    type Hazard_Class is
@@ -167,9 +168,115 @@ package Logistics_Module is
    subtype Placard_Code is String (1 .. 8);
    Empty_Placard : constant Placard_Code := "        ";
 
-   -- Space ≅ Air (facility gate); higher cost/time multipliers
+   -- Space_Haul ≅ Air (spaceport gate); higher cost/time multipliers
    Space_Cost_Factor : constant := 3;
    Space_Time_Factor : constant := 2;
+
+   ------------------------------------------------------------------
+   -- Haul / transport environment (ambient lean + insurance premiums).
+   -- Road / Tunnel / Space_Haul. Rail/Air/Sea remain route Dispatch_Modes.
+   ------------------------------------------------------------------
+   type Haul_Mode is (Road, Tunnel, Space_Haul);
+
+   -- Ambient lean (Physical_Data): pressure kPa, g, radiation µSv/h
+   type Ambient_Lean is record
+      Cabin_Pressure_kPa : Float := 101.0;
+      Ext_Pressure_kPa   : Float := 101.0;
+      Gravity_g          : Float := 1.0;
+      Rad_uSv_Per_h_Lo   : Float := 0.1;
+      Rad_uSv_Per_h_Hi   : Float := 0.1;
+   end record;
+
+   Ambient_Road : constant Ambient_Lean :=
+     (Cabin_Pressure_kPa => 101.0, Ext_Pressure_kPa => 101.0,
+      Gravity_g => 1.0, Rad_uSv_Per_h_Lo => 0.1, Rad_uSv_Per_h_Hi => 0.1);
+   Ambient_Tunnel : constant Ambient_Lean :=
+     (Cabin_Pressure_kPa => 101.0, Ext_Pressure_kPa => 101.0,
+      Gravity_g => 1.0, Rad_uSv_Per_h_Lo => 0.05, Rad_uSv_Per_h_Hi => 0.2);
+   Ambient_Space_Haul : constant Ambient_Lean :=
+     (Cabin_Pressure_kPa => 101.0, Ext_Pressure_kPa => 0.0,
+      Gravity_g => 0.0, Rad_uSv_Per_h_Lo => 50.0, Rad_uSv_Per_h_Hi => 100.0);
+
+   function Ambient_For (Mode : Haul_Mode) return Ambient_Lean;
+
+   function To_Haul_Mode (Mode : Dispatch_Mode) return Haul_Mode
+   with
+     Pre => Mode in Road | Tunnel | Space_Haul;
+
+   ------------------------------------------------------------------
+   -- Hazard insurance premium bands + cover legs (clean-room).
+   ------------------------------------------------------------------
+   type Hazard_Premium_Band is (None, Low, Mid, High, Extreme);
+
+   -- Fixed-point premium multiplier (1.000 = 1x). Prefer over Float.
+   type Premium_Multiplier is delta 0.001 digits 9;
+
+   type Cover_Kind is
+     (Cargo_Loss, Hull_Loss, Crew_Loss, Crew_Sick, Emergency_Leave);
+
+   type Cover_Selection is array (Cover_Kind) of Boolean;
+
+   Empty_Cover : constant Cover_Selection := [others => False];
+   Full_Cover  : constant Cover_Selection := [others => True];
+
+   -- Optional claim event stubs (distinct literals from Cover_Kind)
+   type Claim_Event is
+     (Claim_Cargo_Lost, Claim_Hull_Lost, Claim_Crew_Lost,
+      Claim_Crew_Sick, Claim_Emergency_Leave);
+
+   function Band_Of (Hazard : Hazard_Class) return Hazard_Premium_Band;
+
+   function Base_Band_Factor (Band : Hazard_Premium_Band) return Premium_Multiplier
+   with
+     Post =>
+       (case Band is
+          when None    => Base_Band_Factor'Result = 1.0,
+          when Low     => Base_Band_Factor'Result = 1.2,
+          when Mid     => Base_Band_Factor'Result = 2.0,
+          when High    => Base_Band_Factor'Result = 4.0,
+          when Extreme => Base_Band_Factor'Result = 10.0);
+
+   -- Extreme-only mode extras: Space_Haul 1.5, Tunnel 1.2, Road 1.0
+   function Extreme_Mode_Multiplier (Mode : Haul_Mode) return Premium_Multiplier
+   with
+     Post =>
+       (case Mode is
+          when Road       => Extreme_Mode_Multiplier'Result = 1.0,
+          when Tunnel     => Extreme_Mode_Multiplier'Result = 1.2,
+          when Space_Haul => Extreme_Mode_Multiplier'Result = 1.5);
+
+   function Premium_Factor
+     (Hazard : Hazard_Class; Mode : Haul_Mode) return Premium_Multiplier
+   with
+     Post =>
+       (if Band_Of (Hazard) /= Extreme then
+          Premium_Factor'Result = Base_Band_Factor (Band_Of (Hazard))
+        else
+          Premium_Factor'Result =
+            Base_Band_Factor (Extreme) * Extreme_Mode_Multiplier (Mode));
+
+   function Cover_Leg_Factor (Kind : Cover_Kind) return Premium_Multiplier
+   with
+     Post =>
+       (case Kind is
+          when Cargo_Loss       => Cover_Leg_Factor'Result = 1.0,
+          when Hull_Loss        => Cover_Leg_Factor'Result = 0.6,
+          when Crew_Loss        => Cover_Leg_Factor'Result = 0.8,
+          when Crew_Sick        => Cover_Leg_Factor'Result = 0.25,
+          when Emergency_Leave  => Cover_Leg_Factor'Result = 0.10);
+
+   function Selected_Cover_Sum
+     (Selected : Cover_Selection) return Premium_Multiplier;
+
+   -- Total = sum(selected legs) × Premium_Factor(Hazard, Mode)
+   function Total_Premium_Factor
+     (Hazard   : Hazard_Class;
+      Mode     : Haul_Mode;
+      Selected : Cover_Selection) return Premium_Multiplier
+   with
+     Post =>
+       Total_Premium_Factor'Result =
+         Selected_Cover_Sum (Selected) * Premium_Factor (Hazard, Mode);
 
    -- Cargo/body/mode matrix (see README)
    function Compatible
@@ -179,7 +286,7 @@ package Logistics_Module is
 
    function Van_Can_Carry (Cargo : Cargo_Class) return Boolean;
 
-   -- Air/Space: deny Explosives and Radioactive by default
+   -- Air/Space_Haul: deny Explosives and Radioactive by default
    function Mode_Allows_Hazard
      (Mode : Dispatch_Mode; Hazard : Hazard_Class) return Boolean;
 
@@ -187,10 +294,12 @@ package Logistics_Module is
    function Requires_Tank_Body (Hazard : Hazard_Class) return Boolean;
 
    type City_Record is record
-      Has_Rail      : Boolean := True;
-      Has_Airport   : Boolean := False;
-      Has_Port      : Boolean := False;
-      Has_Spaceport : Boolean := False;
+      Has_Rail               : Boolean := True;
+      Has_Airport            : Boolean := False;
+      Has_Port               : Boolean := False;
+      Has_Spaceport          : Boolean := False;
+      Has_Tunnel             : Boolean := False;
+      Tunnel_Fire_Vent_Risk  : Boolean := False;  -- lean flag
    end record;
 
    type Staff_Role is (Dispatcher, Driver, Mechanic, Clerk, Manager);
@@ -262,12 +371,14 @@ package Logistics_Module is
    function City_Count (C : Company) return Natural;
 
    procedure Add_City
-     (C             : in out Company;
-      Name          : String;
-      Has_Airport   : Boolean;
-      Has_Port      : Boolean;
-      Has_Spaceport : Boolean := False;
-      Id            : out City_Id);
+     (C                      : in out Company;
+      Name                   : String;
+      Has_Airport            : Boolean;
+      Has_Port               : Boolean;
+      Has_Spaceport          : Boolean := False;
+      Has_Tunnel             : Boolean := False;
+      Tunnel_Fire_Vent_Risk  : Boolean := False;
+      Id                     : out City_Id);
 
    function Get_City (C : Company; Id : City_Id) return City_Record;
    function City_Name (C : Company; Id : City_Id) return String;
@@ -362,7 +473,8 @@ package Logistics_Module is
 
    -- Road anytime (body/FE/ADR rules). Rail needs slot stub.
    -- Air: both Has_Airport. Sea: both Has_Port.
-   -- Space ≅ Air: both Has_Spaceport; Container cargo only (Step-1).
+   -- Space_Haul ≅ Air: both Has_Spaceport; Container cargo only (Step-1).
+   -- Tunnel: both Has_Tunnel; same EU road fleet rules; fire/vent lean.
    procedure Dispatch_Order
      (C       : in out Company;
       Order   : Order_Id;

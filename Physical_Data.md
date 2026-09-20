@@ -46,3 +46,40 @@ M1 has **no** N-style goods GVW band — passenger cars use size tags below.
 
 - `GVW >= Curb_Mass` (`Masses_Valid` / `Make_Physical` Pre).
 - Capacity / add checks use `Within_GVW_Class_Limit` for N1/N2/N3/O2/O4.
+
+
+## Haul ambient lean (`Haul_Mode`)
+
+Ops-owned SI lean for transport environments (not legal / medical limits).
+
+| Mode | Cabin kPa | Ext kPa | g | Rad µSv/h |
+|------|-----------|---------|---|-----------|
+| Road | 101 | 101 | 1 | ~0.1 |
+| Tunnel (sealed) | 101 | 101 | 1 | ~0.05–0.2 |
+| Space_Haul | 101 | 0 | 0 (or field) | coast ~50–100 |
+
+See `Ambient_Road`, `Ambient_Tunnel`, `Ambient_Space_Haul` in Ada.
+
+## Hazard premium table
+
+| Band | Factor | Hazard_Class map (lean) |
+|------|--------|-------------------------|
+| None | 1.0 | `None` |
+| Low | 1.2 | `Misc_Dangerous` |
+| Mid | 2.0 | Flammable liquids/solids, Oxidizers |
+| High | 4.0 | Gases, Toxic_Infectious, Corrosive |
+| Extreme | 10.0 | Explosives, Radioactive |
+
+Extreme mode extras (compose): Space_Haul ×1.5 → **15.0**; Tunnel ×1.2 → **12.0**.
+
+## Cover leg factors
+
+| Cover_Kind | Factor |
+|------------|--------|
+| Cargo_Loss | 1.0 |
+| Hull_Loss | 0.6 |
+| Crew_Loss | 0.8 |
+| Crew_Sick | 0.25 |
+| Emergency_Leave | 0.10 |
+
+`Total_Premium_Factor` = sum(selected legs) × `Premium_Factor(Hazard, Mode)`.

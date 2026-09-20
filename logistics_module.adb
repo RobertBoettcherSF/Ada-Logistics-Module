@@ -13,47 +13,47 @@ package body Logistics_Module is
       case Cargo is
          when Silo_Cargo =>
             case Mode is
-               when Road =>
+               when Road | Tunnel =>
                   return Equip = Silo;
                when Rail | Sea =>
                   return True;
-               when Air | Space =>
+               when Air | Space_Haul =>
                   return False;
             end case;
          when Tank_Cargo =>
             case Mode is
-               when Road =>
+               when Road | Tunnel =>
                   return Equip = Tank;
                when Rail | Sea =>
                   return True;
-               when Air | Space =>
+               when Air | Space_Haul =>
                   return False;
             end case;
          when Lowboy_Cargo =>
             case Mode is
-               when Road =>
+               when Road | Tunnel =>
                   return Equip = Lowboy;
                when Rail | Sea =>
                   return True;
-               when Air | Space =>
+               when Air | Space_Haul =>
                   return False;
             end case;
          when Reefer_Cargo =>
-            return Mode = Road and then Equip = Reefer;
+            return Mode in Road | Tunnel and then Equip = Reefer;
          when Flatbed_Cargo =>
             case Mode is
-               when Road =>
+               when Road | Tunnel =>
                   return Equip = Flatbed;
                when Rail | Air =>
                   return True;
-               when Sea | Space =>
+               when Sea | Space_Haul =>
                   return False;
             end case;
          when Container_Cargo =>
             case Mode is
-               when Road =>
+               when Road | Tunnel =>
                   return Equip = Container;
-               when Rail | Air | Sea | Space =>
+               when Rail | Air | Sea | Space_Haul =>
                   return True;
             end case;
       end case;
@@ -72,9 +72,9 @@ package body Logistics_Module is
          return True;
       end if;
       case Mode is
-         when Road | Rail | Sea =>
-            return True;  -- Step-1: surface modes accept all classes (ops rules apply)
-         when Air | Space =>
+         when Road | Rail | Sea | Tunnel =>
+            return True;  -- surface / tunnel: all classes (ops rules apply)
+         when Air | Space_Haul =>
             -- Allow-list subset: ban Explosives and Radioactive by default
             return Hazard /= Explosives and then Hazard /= Radioactive;
       end case;
@@ -208,6 +208,110 @@ package body Logistics_Module is
          M1_Size   => M1_Size);
    end Make_Physical;
 
+   function Ambient_For (Mode : Haul_Mode) return Ambient_Lean is
+   begin
+      case Mode is
+         when Road       => return Ambient_Road;
+         when Tunnel     => return Ambient_Tunnel;
+         when Space_Haul => return Ambient_Space_Haul;
+      end case;
+   end Ambient_For;
+
+   function To_Haul_Mode (Mode : Dispatch_Mode) return Haul_Mode is
+   begin
+      case Mode is
+         when Road =>
+            return Haul_Mode'(Road);
+         when Tunnel =>
+            return Haul_Mode'(Tunnel);
+         when Space_Haul =>
+            return Haul_Mode'(Space_Haul);
+         when Rail | Sea | Air =>
+            raise Program_Error with "Dispatch_Mode is not a Haul_Mode";
+      end case;
+   end To_Haul_Mode;
+
+   function Band_Of (Hazard : Hazard_Class) return Hazard_Premium_Band is
+   begin
+      case Hazard is
+         when None =>
+            return Hazard_Premium_Band'(None);
+         when Misc_Dangerous =>
+            return Low;
+         when Flammable_Liquids | Flammable_Solids | Oxidizers =>
+            return Mid;
+         when Gases | Toxic_Infectious | Corrosive =>
+            return High;
+         when Explosives | Radioactive =>
+            return Extreme;
+      end case;
+   end Band_Of;
+
+   function Base_Band_Factor (Band : Hazard_Premium_Band) return Premium_Multiplier is
+   begin
+      case Band is
+         when None    => return 1.0;
+         when Low     => return 1.2;
+         when Mid     => return 2.0;
+         when High    => return 4.0;
+         when Extreme => return 10.0;
+      end case;
+   end Base_Band_Factor;
+
+   function Extreme_Mode_Multiplier (Mode : Haul_Mode) return Premium_Multiplier is
+   begin
+      case Mode is
+         when Road       => return 1.0;
+         when Tunnel     => return 1.2;
+         when Space_Haul => return 1.5;
+      end case;
+   end Extreme_Mode_Multiplier;
+
+   function Premium_Factor
+     (Hazard : Hazard_Class; Mode : Haul_Mode) return Premium_Multiplier
+   is
+      Band : constant Hazard_Premium_Band := Band_Of (Hazard);
+   begin
+      if Band /= Extreme then
+         return Base_Band_Factor (Band);
+      else
+         return Base_Band_Factor (Extreme) * Extreme_Mode_Multiplier (Mode);
+      end if;
+   end Premium_Factor;
+
+   function Cover_Leg_Factor (Kind : Cover_Kind) return Premium_Multiplier is
+   begin
+      case Kind is
+         when Cargo_Loss      => return 1.0;
+         when Hull_Loss       => return 0.6;
+         when Crew_Loss       => return 0.8;
+         when Crew_Sick       => return 0.25;
+         when Emergency_Leave => return 0.10;
+      end case;
+   end Cover_Leg_Factor;
+
+   function Selected_Cover_Sum
+     (Selected : Cover_Selection) return Premium_Multiplier
+   is
+      Sum : Premium_Multiplier := 0.0;
+   begin
+      for K in Cover_Kind loop
+         if Selected (K) then
+            Sum := Sum + Cover_Leg_Factor (K);
+         end if;
+      end loop;
+      return Sum;
+   end Selected_Cover_Sum;
+
+   function Total_Premium_Factor
+     (Hazard   : Hazard_Class;
+      Mode     : Haul_Mode;
+      Selected : Cover_Selection) return Premium_Multiplier
+   is
+   begin
+      return Selected_Cover_Sum (Selected) * Premium_Factor (Hazard, Mode);
+   end Total_Premium_Factor;
+
    function Create_Company
      (Starting_Cash : Money;
       Starting_Rep  : Reputation_Points := 0) return Company
@@ -228,12 +332,14 @@ package body Logistics_Module is
    function City_Count (C : Company) return Natural is (C.L_Count);
 
    procedure Add_City
-     (C             : in out Company;
-      Name          : String;
-      Has_Airport   : Boolean;
-      Has_Port      : Boolean;
-      Has_Spaceport : Boolean := False;
-      Id            : out City_Id)
+     (C                      : in out Company;
+      Name                   : String;
+      Has_Airport            : Boolean;
+      Has_Port               : Boolean;
+      Has_Spaceport          : Boolean := False;
+      Has_Tunnel             : Boolean := False;
+      Tunnel_Fire_Vent_Risk  : Boolean := False;
+      Id                     : out City_Id)
    is
       N : Natural;
    begin
@@ -243,10 +349,12 @@ package body Logistics_Module is
       C.L_Count := C.L_Count + 1;
       Id := City_Id (C.L_Count);
       C.Cities (Id) :=
-        (Has_Rail      => True,
-         Has_Airport   => Has_Airport,
-         Has_Port      => Has_Port,
-         Has_Spaceport => Has_Spaceport);
+        (Has_Rail              => True,
+         Has_Airport           => Has_Airport,
+         Has_Port              => Has_Port,
+         Has_Spaceport         => Has_Spaceport,
+         Has_Tunnel            => Has_Tunnel,
+         Tunnel_Fire_Vent_Risk => Tunnel_Fire_Vent_Risk);
       N := Natural'Min (Name'Length, Loc_Name'Length);
       C.City_Names_A (Id) := [others => ' '];
       C.City_Names_A (Id) (1 .. N) :=
@@ -766,13 +874,34 @@ package body Logistics_Module is
                return;
             end if;
 
-         when Space =>
+         when Space_Haul =>
             -- Spacecraft ≅ airplane: spaceport gate like airport
             if not Orig.Has_Spaceport or else not Dest.Has_Spaceport then
                return;
             end if;
-            if not Cargo_Allows_Mode (O.Cargo, Space) then
+            if not Cargo_Allows_Mode (O.Cargo, Space_Haul) then
                return;
+            end if;
+
+         when Tunnel =>
+            -- Underground link: both ends Has_Tunnel; same EU road fleet
+            if not Orig.Has_Tunnel or else not Dest.Has_Tunnel then
+               return;
+            end if;
+            if Natural (Vehicle) > C.V_Count then
+               return;
+            end if;
+            V := C.Vehicles (Vehicle);
+            if not Road_Vehicle_Ok (C, V, O) then
+               return;
+            end if;
+            C.Vehicles (Vehicle).Available := False;
+            if C.Vehicles (Vehicle).Condition >= 5 then
+               C.Vehicles (Vehicle).Condition :=
+                 C.Vehicles (Vehicle).Condition - 5;
+            end if;
+            if C.Vehicles (Vehicle).Condition < 40 then
+               C.Vehicles (Vehicle).Needs_Maintain := True;
             end if;
       end case;
 
@@ -803,7 +932,7 @@ package body Logistics_Module is
       if C.Rep <= Reputation_Points'Last - Bonus then
          C.Rep := C.Rep + Bonus;
       end if;
-      if O.Mode = Road and then C.V_Count > 0 then
+      if O.Mode in Road | Tunnel and then C.V_Count > 0 then
          for I in Vehicle_Id range 1 .. Vehicle_Id (C.V_Count) loop
             if not C.Vehicles (I).Available then
                C.Vehicles (I).Available := True;

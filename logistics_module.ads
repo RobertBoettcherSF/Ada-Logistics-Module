@@ -28,7 +28,7 @@ package Logistics_Module is
 
    -- Light_Van / Rigid / Artic_Tractor (tractor alone carries 0 FE)
    type Vehicle_Kind is (Light_Van, Rigid, Artic_Tractor);
-   type Body_Kind is (Silo, Tank, Reefer, Flatbed, Container, Lowboy);
+   type Body_Kind is (Silo, Tank, Reefer, Flatbed, Container, Lowboy, Dry_Box);
 
    ------------------------------------------------------------------
    -- EU vehicle categories (clean-room Physical_Data + category structure).
@@ -149,7 +149,24 @@ package Logistics_Module is
 
    type Cargo_Class is
      (Silo_Cargo, Tank_Cargo, Lowboy_Cargo, Reefer_Cargo,
-      Flatbed_Cargo, Container_Cargo);
+      Flatbed_Cargo, Container_Cargo, Dry_Box_Cargo);
+
+   -- Product cargo kinds (profiles declared with hazard bands below).
+   type Cargo_Kind is (Food_Dry, Food_Cold, Cosmetics, Pharma_Cold);
+
+   type Temp_Band_C is record
+      Lo_C       : Float := 0.0;
+      Hi_C       : Float := 0.0;
+      Controlled : Boolean := False;
+   end record;
+
+   Density_Food_Dry_kg_m3  : constant Float := 400.0;
+   Density_Cosmetics_kg_m3 : constant Float := 600.0;
+
+   Food_Cold_Temp   : constant Temp_Band_C :=
+     (Lo_C => 0.0, Hi_C => 4.0, Controlled => True);
+   Pharma_Cold_Temp : constant Temp_Band_C :=
+     (Lo_C => 2.0, Hi_C => 8.0, Controlled => True);
 
    type Dispatch_Mode is (Road, Rail, Sea, Air, Space_Haul, Tunnel);
 
@@ -208,9 +225,9 @@ package Logistics_Module is
    ------------------------------------------------------------------
    -- World_Body profiles + spaceport catalog (DS SI, lean).
    ------------------------------------------------------------------
-   type World_Body is (Venus_Cloud_Port, Moon_Polar, Mars, Titan);
+   type World_Body is (Terra_0, Venus_Cloud_Port, Moon_Polar, Mars, Titan);
 
-   type Atmos_Kind is (CO2, Vacuum, Thin_CO2, N2_CH4);
+   type Atmos_Kind is (CO2, Vacuum, Thin_CO2, N2_CH4, Earth_N2);
 
    type World_Body_Profile is record
       Altitude_m       : Float := 0.0;
@@ -225,6 +242,45 @@ package Logistics_Module is
       Float_Pad        : Boolean := False;
       Relay            : Boolean := False;
    end record;
+
+   ------------------------------------------------------------------
+   -- Hub positions (SI metres). Origin = Terra_0 (0,0,0).
+   -- Distance_m = Euclidean norm; Road/Tunnel may use local 2D on Terra.
+   ------------------------------------------------------------------
+   type Position_m is record
+      X : Float := 0.0;
+      Y : Float := 0.0;
+      Z : Float := 0.0;
+   end record;
+
+   Terra_Origin : constant Position_m := (0.0, 0.0, 0.0);
+
+   -- Lean stubs (ops-owned placeholders)
+   Hub_AU_m                : constant Float := 1.495_978_707e11;
+   Earth_Moon_Distance_m   : constant Float := 3.84e8;
+   Mars_Offset_m           : constant Float := 2.25e11;  -- ~1.5 AU lean
+
+   function Position_Of (World : World_Body) return Position_m;
+   function Distance_m (A, B : Position_m) return Float
+   with
+     Post => Distance_m'Result >= 0.0;
+   function Distance_m (A, B : World_Body) return Float
+   with
+     Post => Distance_m'Result >= 0.0;
+
+   -- Terra surface hub (origin). Ambient lean ≈ Road.
+   Profile_Terra_0 : constant World_Body_Profile :=
+     (Altitude_m       => 0.0,
+      Ext_Pressure_kPa => 101.0,
+      Temp_C_Lo        => -20.0,
+      Temp_C_Hi        => 40.0,
+      Gravity_g        => 1.0,
+      Rad_uSv_Per_h_Lo => 0.1,
+      Rad_uSv_Per_h_Hi => 0.1,
+      Atmos            => Earth_N2,
+      Has_Spaceport    => True,
+      Float_Pad        => False,
+      Relay            => False);
 
    -- Venus cloud deck float port (~50 km): Earth-like P, warm CO2, g_eff≈0.90
    Profile_Venus_Cloud_Port : constant World_Body_Profile :=
@@ -286,6 +342,9 @@ package Logistics_Module is
    with
      Post =>
        (case World is
+          when Terra_0 =>
+            Profile_Of'Result.Gravity_g = 1.0
+              and then Profile_Of'Result.Ext_Pressure_kPa = 101.0,
           when Venus_Cloud_Port =>
             Profile_Of'Result.Altitude_m = 50_000.0
               and then Profile_Of'Result.Ext_Pressure_kPa = 101.0
@@ -398,7 +457,31 @@ package Logistics_Module is
       Equip : Body_Kind;
       Mode  : Dispatch_Mode) return Boolean;
 
+   function Compatible
+     (Kind  : Cargo_Kind;
+      Equip : Body_Kind;
+      Mode  : Dispatch_Mode) return Boolean;
+
    function Van_Can_Carry (Cargo : Cargo_Class) return Boolean;
+
+   function To_Cargo_Class (Kind : Cargo_Kind) return Cargo_Class;
+   function Primary_Body (Kind : Cargo_Kind) return Body_Kind;
+   function Allows_Body (Kind : Cargo_Kind; Equip : Body_Kind) return Boolean;
+   function Default_Hazard_Band (Kind : Cargo_Kind) return Hazard_Premium_Band;
+   function Hazard_Band_Allowed
+     (Kind : Cargo_Kind; Band : Hazard_Premium_Band) return Boolean;
+   function Density_kg_m3_Of (Kind : Cargo_Kind) return Float;
+   function Temp_Band_Of (Kind : Cargo_Kind) return Temp_Band_C;
+
+   -- M1 last-mile: Cosmetics / Food_Dry only
+   function M1_Last_Mile_Ok (Kind : Cargo_Kind) return Boolean;
+
+   -- Rejects: cold on Flatbed; Extreme hazard on M1 Car_*
+   function Vehicle_Cargo_Ok
+     (Phys   : Vehicle_Physical;
+      Kind   : Cargo_Kind;
+      Equip  : Body_Kind;
+      Hazard : Hazard_Class := None) return Boolean;
 
    -- Air/Space_Haul: deny Explosives and Radioactive by default
    function Mode_Allows_Hazard
@@ -416,6 +499,7 @@ package Logistics_Module is
       Tunnel_Fire_Vent_Risk  : Boolean := False;  -- lean flag
       Bound_Pad              : Spaceport_Id := 1;
       Has_Pad_Link           : Boolean := False;
+      Position               : Position_m := Terra_Origin;  -- local / hub SI
    end record;
 
    type Staff_Role is (Dispatcher, Driver, Mechanic, Clerk, Manager);
@@ -440,6 +524,8 @@ package Logistics_Module is
       Origin            : City_Id := 1;
       Destination       : City_Id := 1;
       Cargo             : Cargo_Class := Flatbed_Cargo;
+      Kind              : Cargo_Kind := Food_Dry;
+      Has_Kind          : Boolean := False;
       Hazard            : Hazard_Class := None;
       Placard           : Placard_Code := Empty_Placard;
       Amount_FE         : Freight_Units := 0;
@@ -503,7 +589,13 @@ package Logistics_Module is
       Has_Spaceport          : Boolean := False;
       Has_Tunnel             : Boolean := False;
       Tunnel_Fire_Vent_Risk  : Boolean := False;
+      Position               : Position_m := Terra_Origin;
       Id                     : out City_Id);
+
+   function City_Distance_m
+     (C : Company; A, B : City_Id) return Float
+   with
+     Post => City_Distance_m'Result >= 0.0;
 
    function Get_City (C : Company; Id : City_Id) return City_Record;
    function City_Name (C : Company; Id : City_Id) return String;
@@ -607,6 +699,19 @@ package Logistics_Module is
       Origin      : City_Id;
       Destination : City_Id;
       Cargo       : Cargo_Class;
+      Amount_FE   : Freight_Units;
+      Payment     : Money;
+      Id          : out Order_Id;
+      Success     : out Boolean;
+      Hazard      : Hazard_Class := None;
+      Placard     : Placard_Code := Empty_Placard);
+
+   -- Product-kind order: sets Has_Kind and maps Kind → Cargo_Class
+   procedure Create_Order
+     (C           : in out Company;
+      Origin      : City_Id;
+      Destination : City_Id;
+      Kind        : Cargo_Kind;
       Amount_FE   : Freight_Units;
       Payment     : Money;
       Id          : out Order_Id;

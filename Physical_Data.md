@@ -140,3 +140,31 @@ Each tick appends `sim_run.csv`: comment `# run_id=…` then header
 
 Assign gate: `Fleet_In_Flight >= Lane_Capacity` → `Rejected_ATC` / reject.
 `sim_run.csv` logs `Fleet_In_Flight`, `Lane_Capacity`, `Assign_Rejected`.
+
+
+## Hub positions (SI)
+
+Origin `Terra_0` at `Position_m (0,0,0)`. `Distance_m` = Euclidean norm.
+Lean stubs: `Moon_Polar` ≈ 3.84×10⁸ m; `Mars` ≈ 2.25×10¹¹ m; Venus/Titan AU-scale.
+
+## Consumables
+
+| Constant | Value |
+|----------|-------|
+| Consumables_kg_person_day | 2.5 |
+| Crew_150 | 150 |
+| Demand_Rate_kg_s | Crew × kg/day / 86400 |
+| Min_Cruise_Speed_m_s | Demand × 2 × Distance / Cargo |
+
+## Tournament score (fuel-adjusted)
+
+| Symbol | Formula |
+|--------|---------|
+| Fuel_Mass_kg | Fuel_Coeff_kg × (Cruise_Speed_m_s / Speed_Ref_m_s)² |
+| Payload_Net_kg | max(0, Cargo_Mass_kg − Fuel_Mass_kg) |
+| Score_kg_s | Payload_Net_kg / Transit_Duration_s (one-way; optional RT ÷2) |
+| Reward_Coin | 1.00 × (Score_kg_s / Score_Ref_kg_s) |
+| Fuel_Coeff_kg | 50_000 (lean) |
+| Speed_Ref_m_s | Barge_Inner cruise (3000) |
+
+Score_Ref from Barge_Inner at ref distance. Cruise still < c. Extreme speed can lower Score vs mid due to fuel.

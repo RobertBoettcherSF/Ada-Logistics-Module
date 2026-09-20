@@ -34,6 +34,23 @@ package body Logistics_Module.Demand_Cells is
       return P.Cruise_Speed_m_s;
    end Cruise_Speed_m_s;
 
+   function Demand_Rate_kg_s
+     (Crew              : Natural;
+      Kg_Per_Person_Day : Float := Consumables_kg_person_day) return Float
+   is
+   begin
+      return Float (Crew) * Kg_Per_Person_Day / Seconds_Per_Day_s;
+   end Demand_Rate_kg_s;
+
+   function Min_Cruise_Speed_m_s
+     (Demand_Rate_kg_s : Float;
+      Distance_m       : Float;
+      Cargo_Mass_kg    : Float) return Float
+   is
+   begin
+      return Demand_Rate_kg_s * 2.0 * Distance_m / Cargo_Mass_kg;
+   end Min_Cruise_Speed_m_s;
+
    function Ship_Count (Cell : Demand_Cell) return Natural is
       N : Natural := 0;
    begin
@@ -124,6 +141,101 @@ package body Logistics_Module.Demand_Cells is
       end if;
       return Thr / Den;
    end Fitness;
+
+   function Fuel_Mass_kg (S : Fleet_Species) return Float is
+      V : constant Float := Cruise_Speed_m_s (S);
+      R : constant Float := V / Speed_Ref_m_s;
+   begin
+      return Fuel_Coeff_kg * R * R;
+   end Fuel_Mass_kg;
+
+   function Payload_Net_kg (S : Fleet_Species) return Float is
+      P    : constant Species_Profile := Profile_Of (S);
+      Fuel : constant Float := Fuel_Mass_kg (S);
+      Net  : constant Float := P.Cargo_Mass_kg - Fuel;
+   begin
+      if Net > 0.0 then
+         return Net;
+      else
+         return 0.0;
+      end if;
+   end Payload_Net_kg;
+
+   function Score_kg_s
+     (S          : Fleet_Species;
+      Distance_m : Float) return Float
+   is
+      Tr  : constant Float := Transit_Duration_s (Distance_m, S);
+      Net : constant Float := Payload_Net_kg (S);
+   begin
+      if Tr <= 0.0 then
+         return 0.0;
+      end if;
+      -- One-way default. Optional round-trip: Score_kg_s / 2.0 externally.
+      return Net / Tr;
+   end Score_kg_s;
+
+   function Score_Ref_kg_s (Distance_m : Float) return Float is
+   begin
+      return Score_kg_s (Barge_Inner, Distance_m);
+   end Score_Ref_kg_s;
+
+   function Reward_Coin
+     (S          : Fleet_Species;
+      Distance_m : Float;
+      Score_Ref  : Float) return Float
+   is
+      Sc : constant Float := Score_kg_s (S, Distance_m);
+   begin
+      if Score_Ref <= 0.0 then
+         return 0.0;
+      end if;
+      return Reward_Coin_Base * (Sc / Score_Ref);
+   end Reward_Coin;
+
+   procedure Accrue_Rewards
+     (State      : in out Tournament_State;
+      Distance_m : Float)
+   is
+      Ref : Float;
+      Sc  : Float;
+   begin
+      if State.Score_Ref_kg_s <= 0.0 then
+         State.Distance_Ref_m := Distance_m;
+         State.Score_Ref_kg_s := Score_Ref_kg_s (Distance_m);
+      end if;
+      Ref := State.Score_Ref_kg_s;
+      for S in Fleet_Species loop
+         Sc := Score_kg_s (S, Distance_m);
+         State.Scores (S) := Sc;
+         State.Fuel (S) := Fuel_Mass_kg (S);
+         State.Payload (S) := Payload_Net_kg (S);
+         State.Rewards (S) :=
+           State.Rewards (S) + Reward_Coin (S, Distance_m, Ref);
+      end loop;
+   end Accrue_Rewards;
+
+   function Tournament_Winner
+     (State      : Tournament_State;
+      Distance_m : Float) return Fleet_Species
+   is
+      Best : Fleet_Species := Barge_Inner;
+      R, Rb : Float;
+      F, Fb : Float;
+   begin
+      Rb := State.Rewards (Best);
+      Fb := Fitness (Best, Distance_m, 1);
+      for S in Fleet_Species loop
+         R := State.Rewards (S);
+         F := Fitness (S, Distance_m, 1);
+         if R > Rb or else (R = Rb and then F > Fb) then
+            Rb := R;
+            Fb := F;
+            Best := S;
+         end if;
+      end loop;
+      return Best;
+   end Tournament_Winner;
 
    function Beta_Of (S : Fleet_Species) return Float is
    begin
@@ -243,7 +355,8 @@ package body Logistics_Module.Demand_Cells is
          "t_s,cell_id,Demand_Rate_kg_s,Stock_kg,Deficit_kg,species,"
          & "Ship_Count,Cruise_Speed_m_s,Cargo_Mass_kg,Gross_Mass_kg,"
          & "Distance_m,Transit_Duration_s,Throughput_kg_s,Fitness,beta,c_m_s,"
-         & "Fleet_In_Flight,Lane_Capacity,Assign_Rejected");
+         & "Fleet_In_Flight,Lane_Capacity,Assign_Rejected,"
+         & "Score_kg_s,Reward_Coin,Fuel_Mass_kg,Payload_Net_kg");
       Close (F);
       Run_Open := True;
       Run_Len := Natural'Min (Path'Length, Run_Path'Length);
@@ -252,9 +365,13 @@ package body Logistics_Module.Demand_Cells is
 
 
    procedure Append_Sim_Rows
-     (Cell : Demand_Cell;
-      T_s  : Float;
-      Path : String := Sim_Log_Path)
+     (Cell     : Demand_Cell;
+      T_s      : Float;
+      Path     : String := Sim_Log_Path;
+      Scores   : Species_Scores := [others => 0.0];
+      Rewards  : Species_Rewards := [others => 0.0];
+      Fuel     : Species_Fuel := [others => 0.0];
+      Payload  : Species_Payload := [others => 0.0])
    is
       use Ada.Text_IO;
       F    : File_Type;
@@ -301,7 +418,11 @@ package body Logistics_Module.Demand_Cells is
          -- ATC columns (Fitness path logs zeros; ATC package logs real lane SI)
          Put (F, '0'); Put (F, ',');
          Put (F, '0'); Put (F, ',');
-         Put (F, '0');
+         Put (F, '0'); Put (F, ',');
+         Put_Sci (F, Scores (S)); Put (F, ',');
+         Put_Sci (F, Rewards (S)); Put (F, ',');
+         Put_Sci (F, Fuel (S)); Put (F, ',');
+         Put_Sci (F, Payload (S));
          New_Line (F);
       end loop;
       Close (F);
@@ -343,6 +464,73 @@ package body Logistics_Module.Demand_Cells is
          Append_Sim_Rows (Cell, T_s, Path);
       end if;
    end Life_Tick;
+
+   procedure Run_Tournament_Ticks
+     (Cell      : in out Demand_Cell;
+      State     : in out Tournament_State;
+      N_Ticks   : Positive;
+      Delta_s   : Float;
+      T0_s      : Float := 0.0;
+      Log       : Boolean := True;
+      Path      : String := Sim_Log_Path;
+      Time_Rate : Float := 1.0)
+   is
+      T     : Float := T0_s;
+      W     : Fleet_Species;
+      Worst : Fleet_Species;
+   begin
+      State.Active := True;
+      if Cell.Distance_m > 0.0 then
+         if State.Score_Ref_kg_s <= 0.0 then
+            State.Distance_Ref_m := Cell.Distance_m;
+            State.Score_Ref_kg_s := Score_Ref_kg_s (Cell.Distance_m);
+         end if;
+      end if;
+
+      if Log then
+         if not Run_Open
+           or else Run_Len /= Path'Length
+           or else Run_Path (1 .. Run_Len) /= Path
+         then
+            Begin_Sim_Run (Time_Rate, Path);
+         elsif not Ada.Directories.Exists (Path) then
+            Begin_Sim_Run (Time_Rate, Path);
+         end if;
+      end if;
+
+      for I in 1 .. N_Ticks loop
+         if Cell.Distance_m > 0.0 then
+            Accrue_Rewards (State, Cell.Distance_m);
+            W := Tournament_Winner (State, Cell.Distance_m);
+         else
+            W := Cell.Preferred;
+         end if;
+
+         Tick_Cell (Cell, Delta_s);
+         if Cell.Distance_m > 0.0 then
+            if Under_Served (Cell) then
+               -- Bias spawn to max Score/Reward winners (Fitness formula untouched)
+               Cell.Preferred := W;
+               Cell.Fleet (W) := Cell.Fleet (W) + 1;
+            elsif Over_Served (Cell) then
+               Worst := Worst_Present (Cell);
+               if Cell.Fleet (Worst) > 0 then
+                  Cell.Fleet (Worst) := Cell.Fleet (Worst) - 1;
+               end if;
+            end if;
+         end if;
+
+         if Log then
+            Append_Sim_Rows
+              (Cell, T, Path,
+               Scores  => State.Scores,
+               Rewards => State.Rewards,
+               Fuel    => State.Fuel,
+               Payload => State.Payload);
+         end if;
+         T := T + Delta_s;
+      end loop;
+   end Run_Tournament_Ticks;
 
    procedure Apply_Arrival
      (Cell       : in out Demand_Cell;

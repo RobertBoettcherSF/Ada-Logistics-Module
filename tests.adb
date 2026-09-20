@@ -933,6 +933,268 @@ begin
       end;
    end;
 
+   ------------------------------------------------------------------
+   -- Cargo kinds (TDD): Food_Dry / Food_Cold / Cosmetics / Pharma_Cold
+   ------------------------------------------------------------------
+   declare
+      Tb : Temp_Band_C;
+   begin
+      Check (Primary_Body (Food_Dry) = Dry_Box, "Food_Dry primary Dry_Box");
+      Check (Allows_Body (Food_Dry, Dry_Box)
+               and then Allows_Body (Food_Dry, Container),
+             "Food_Dry Dry_Box/Container");
+      Check (Default_Hazard_Band (Food_Dry) = None
+               and then Hazard_Band_Allowed (Food_Dry, Low),
+             "Food_Dry hazard None/Low");
+      Check (abs (Density_kg_m3_Of (Food_Dry) - 400.0) < 1.0,
+             "Food_Dry density ~400");
+
+      Check (Primary_Body (Food_Cold) = Reefer, "Food_Cold primary Reefer");
+      Check (Default_Hazard_Band (Food_Cold) = Low, "Food_Cold hazard Low");
+      Tb := Temp_Band_Of (Food_Cold);
+      Check (Tb.Controlled and then Tb.Lo_C = 0.0 and then Tb.Hi_C = 4.0,
+             "Food_Cold T 0..4 C");
+
+      Check (Primary_Body (Cosmetics) = Dry_Box, "Cosmetics Dry_Box");
+      Check (Default_Hazard_Band (Cosmetics) = Low, "Cosmetics hazard Low");
+      Check (abs (Density_kg_m3_Of (Cosmetics) - 600.0) < 1.0,
+             "Cosmetics density ~600");
+
+      Check (Primary_Body (Pharma_Cold) = Reefer, "Pharma_Cold Reefer");
+      Check (Default_Hazard_Band (Pharma_Cold) = Mid, "Pharma_Cold Mid");
+      Tb := Temp_Band_Of (Pharma_Cold);
+      Check (Tb.Controlled and then Tb.Lo_C = 2.0 and then Tb.Hi_C = 8.0,
+             "Pharma_Cold T 2..8 C");
+
+      Check (not Allows_Body (Food_Cold, Flatbed)
+               and then not Allows_Body (Pharma_Cold, Flatbed),
+             "reject cold on Flatbed");
+      Check (not Compatible (Food_Cold, Flatbed, Road),
+             "Food_Cold not Flatbed Compatible");
+      Check (Compatible (Food_Dry, Dry_Box, Road)
+               and then Compatible (Food_Dry, Container, Road),
+             "Food_Dry Compatible Dry_Box/Container");
+      Check (Compatible (Cosmetics, Dry_Box, Road), "Cosmetics Compatible");
+      Check (Compatible (Pharma_Cold, Reefer, Road), "Pharma_Cold Compatible");
+
+      -- Extreme hazard banned on M1 Car_*
+      Check (not Vehicle_Cargo_Ok
+                (Profile_M1 (Car_Small), Food_Dry, Dry_Box, Explosives),
+             "reject Extreme on M1 Car_Small");
+      Check (not Vehicle_Cargo_Ok
+                (Profile_M1 (Car_Medium), Cosmetics, Dry_Box, Radioactive),
+             "reject Extreme on M1 Car_Medium");
+      Check (Vehicle_Cargo_Ok
+                (Profile_M1 (Car_Large), Food_Dry, Dry_Box, None),
+             "M1 Car_Large Food_Dry OK");
+      Check (not Vehicle_Cargo_Ok
+                (Profile_M1 (Car_Small), Food_Cold, Reefer, None),
+             "M1 rejects Food_Cold last-mile");
+      Check (not Vehicle_Cargo_Ok
+                (Van_N1, Food_Cold, Flatbed, None),
+             "N1 rejects Food_Cold on Flatbed");
+   end;
+
+   ------------------------------------------------------------------
+   -- M1 last-mile assign: Cosmetics / Food_Dry; N1 van / N2-N3 bulk
+   ------------------------------------------------------------------
+   declare
+      Pc : Company;
+      Ca, Cb : City_Id;
+      Vs, Vm, Vl, Vn, Vr : Vehicle_Id;
+      O1, O2, O3, O4 : Order_Id;
+      Ok : Boolean;
+      Sid : Staff_Id;
+   begin
+      Pc := Create_Company (100_000.00);
+      Add_City (Pc, "ShopA", False, False, Id => Ca);
+      Add_City (Pc, "ShopB", False, False, Id => Cb);
+      Hire_Staff (Pc, Dispatcher, 100.00, Sid, Ok);
+      Hire_Staff (Pc, Driver, 100.00, Sid, Ok);
+
+      Add_Vehicle
+        (Pc, Light_Van, Dry_Box, True, 2, 1_000.00, Vs, Ok,
+         Phys => Profile_M1 (Car_Small));
+      Add_Vehicle
+        (Pc, Light_Van, Dry_Box, True, 2, 1_000.00, Vm, Ok,
+         Phys => Profile_M1 (Car_Medium));
+      Add_Vehicle
+        (Pc, Light_Van, Dry_Box, True, 2, 1_000.00, Vl, Ok,
+         Phys => Profile_M1 (Car_Large));
+      Add_Vehicle (Pc, Light_Van, Dry_Box, True, 4, 2_000.00, Vn, Ok);
+      Add_Vehicle (Pc, Rigid, Reefer, True, 16, 8_000.00, Vr, Ok);
+      Check (Ok, "M1/N1/N2 fleet seed");
+
+      Create_Order (Pc, Ca, Cb, Cosmetics, 1, 50.00, O1, Ok);
+      Create_Order (Pc, Ca, Cb, Food_Dry, 1, 50.00, O2, Ok);
+      Create_Order (Pc, Ca, Cb, Food_Cold, 1, 80.00, O3, Ok);
+      Create_Order (Pc, Ca, Cb, Pharma_Cold, 2, 120.00, O4, Ok);
+
+      -- Accept via offer path
+      declare
+         Off : Offer_Id;
+      begin
+         Make_Offer (Pc, O1, 50.00, Off, Ok);
+         Accept_Offer (Pc, Off, Ok);
+         Make_Offer (Pc, O2, 50.00, Off, Ok);
+         Accept_Offer (Pc, Off, Ok);
+         Make_Offer (Pc, O3, 80.00, Off, Ok);
+         Accept_Offer (Pc, Off, Ok);
+         Make_Offer (Pc, O4, 120.00, Off, Ok);
+         Accept_Offer (Pc, Off, Ok);
+      end;
+
+      Dispatch_Order (Pc, O1, Road, Vs, Ok);
+      Check (Ok, "M1 Car_Small Cosmetics assign");
+      Dispatch_Order (Pc, O2, Road, Vm, Ok);
+      Check (Ok, "M1 Car_Medium Food_Dry assign");
+
+      -- Cold needs reefer rigid (N2/N3), not M1
+      Dispatch_Order (Pc, O3, Road, Vl, Ok);
+      Check (not Ok, "M1 rejects Food_Cold assign");
+      Dispatch_Order (Pc, O3, Road, Vr, Ok);
+      Check (Ok, "N2/N3 reefer Food_Cold assign");
+
+      -- N1 van still Dry_Box Food_Dry
+      declare
+         O5 : Order_Id;
+         Off : Offer_Id;
+      begin
+         Create_Order (Pc, Ca, Cb, Food_Dry, 1, 40.00, O5, Ok);
+         Make_Offer (Pc, O5, 40.00, Off, Ok);
+         Accept_Offer (Pc, Off, Ok);
+         Dispatch_Order (Pc, O5, Road, Vn, Ok);
+         Check (Ok, "N1 van Food_Dry still works");
+      end;
+
+      Dispatch_Order (Pc, O4, Road, Vr, Ok);
+      -- Vr already busy on O3
+      Check (not Ok or else Get_Vehicle (Pc, Vr).Available = False,
+             "Pharma_Cold uses bulk reefer path");
+   end;
+
+   ------------------------------------------------------------------
+   -- Hub Position_m / Distance_m (Terra_0 origin)
+   ------------------------------------------------------------------
+   declare
+      D_Moon, D_Back, D_Mars : Float;
+      Pa, Pb : Position_m;
+   begin
+      Check (Position_Of (Terra_0).X = 0.0
+               and then Position_Of (Terra_0).Y = 0.0
+               and then Position_Of (Terra_0).Z = 0.0,
+             "Terra_0 at origin");
+      D_Moon := Distance_m (Terra_0, Moon_Polar);
+      Check (abs (D_Moon - Earth_Moon_Distance_m) < 1.0e3,
+             "Moon distance ~3.84e8");
+      D_Back := Distance_m (Moon_Polar, Terra_0);
+      Check (abs (D_Moon - D_Back) < 1.0e-3, "Distance(A,B)=Distance(B,A)");
+      D_Mars := Distance_m (Terra_0, Mars);
+      Check (abs (D_Mars - Mars_Offset_m) < 1.0, "Mars AU-scale offset");
+      Pa := (X => 3.0, Y => 4.0, Z => 0.0);
+      Pb := Terra_Origin;
+      Check (abs (Distance_m (Pa, Pb) - 5.0) < 1.0e-5, "Euclidean 3-4-5");
+   end;
+
+   ------------------------------------------------------------------
+   -- Consumables SI + min cruise (Moon / Mars, Crew_150)
+   ------------------------------------------------------------------
+   declare
+      Dr : Float;
+      V_Moon, V_Mars : Float;
+   begin
+      Check (Consumables_kg_person_day = 2.5, "Consumables_kg_person_day 2.5");
+      Check (Crew_150 = 150, "Crew_150 constant");
+      Dr := Demand_Rate_kg_s (Crew_150);
+      Check (abs (Dr - Float (Crew_150) * 2.5 / 86_400.0) < 1.0e-9,
+             "Demand_Rate_kg_s crew*kg_d/86400");
+      V_Moon := Min_Cruise_Speed_m_s
+        (Dr, Earth_Moon_Distance_m, Barge_Cargo_Mass_kg);
+      Check (V_Moon >= 3.18 and then V_Moon < 3.25,
+             "Moon 3.84e8 Barge min cruise ~>=3.2 m/s");
+      V_Mars := Min_Cruise_Speed_m_s
+        (Dr, Mars_Offset_m, Barge_Cargo_Mass_kg);
+      Check (V_Mars >= 1.8e3 and then V_Mars < 2.0e3,
+             "Mars 2.25e11 Barge min cruise ~>=1.9e3");
+      Check (Speed_Space_Haul_m_s >= V_Mars,
+             "Space_Haul 3000 suffices one 150-person Mars port");
+   end;
+
+   ------------------------------------------------------------------
+   -- Tournament Score_kg_s + fuel; Reward_Coin; N-tick evolve
+   ------------------------------------------------------------------
+   declare
+      Dist : constant Float := 3_000_000.0;
+      Sc_B, Sc_F, Sc_R : Float;
+      Fu_B, Fu_F : Float;
+      Ref : Float;
+      Cell : Demand_Cell;
+      State : Tournament_State;
+      Log_Path : constant String := "obj/sim_run_tournament_test.csv";
+      F : File_Type;
+      Buf : String (1 .. 512);
+      Last : Natural;
+      Found_Score, Found_Fuel, Found_Pay : Boolean := False;
+   begin
+      Fu_B := Fuel_Mass_kg (Barge_Inner);
+      Fu_F := Fuel_Mass_kg (Fast_Courier);
+      Check (Fu_F > Fu_B, "higher speed increases fuel");
+      Check (Cruise_Speed_m_s (Fast_Courier) < Float (c_m_s)
+               and then Cruise_Speed_m_s (Relativistic_Stub) < Float (c_m_s),
+             "cruise still < c");
+
+      Sc_B := Score_kg_s (Barge_Inner, Dist);
+      Sc_F := Score_kg_s (Fast_Courier, Dist);
+      Sc_R := Score_kg_s (Relativistic_Stub, Dist);
+      Check (Sc_B > 0.0, "barge mid score > 0");
+      Check (Sc_F < Sc_B or else Payload_Net_kg (Fast_Courier) = 0.0,
+             "extreme speed can lower Score vs mid");
+      Check (Sc_R <= Sc_B, "relativistic score not above barge mid");
+
+      Ref := Score_Ref_kg_s (Dist);
+      Check (abs (Ref - Sc_B) < 1.0e-6, "Score_Ref = Barge Score");
+      Check (abs (Reward_Coin (Barge_Inner, Dist, Ref) - 1.00) < 1.0e-5,
+             "Reward_Coin barge = 1.00 * ratio");
+
+      -- more cargo at same speed → higher score (barge > stub cargo)
+      Check (Profile_Of (Barge_Inner).Cargo_Mass_kg
+               > Profile_Of (Relativistic_Stub).Cargo_Mass_kg,
+             "barge has more cargo than stub");
+
+      Cell :=
+        (Demand_Rate_kg_s => 500.0,
+         Stock_kg         => 0.0,
+         Horizon_s        => 1_000.0,
+         Distance_m       => Dist,
+         Fleet            => [others => 0],
+         Preferred        => Barge_Inner,
+         Cell_Id          => 7);
+      State := (others => <>);
+      if Ada.Directories.Exists (Log_Path) then
+         Ada.Directories.Delete_File (Log_Path);
+      end if;
+      Run_Tournament_Ticks
+        (Cell, State, N_Ticks => 5, Delta_s => 1.0,
+         Log => True, Path => Log_Path, Time_Rate => 1.0);
+      Check (State.Active and then State.Rewards (Tournament_Winner (State, Dist))
+               >= State.Rewards (Barge_Inner),
+             "tournament accrues rewards; winner max sum");
+      Check (Ship_Count (Cell) > 0, "tournament N ticks spawn biased");
+
+      Open (F, In_File, Log_Path);
+      Get_Line (F, Buf, Last);  -- comment
+      Get_Line (F, Buf, Last);  -- header
+      Found_Score := Ada.Strings.Fixed.Index (Buf (1 .. Last), "Score_kg_s") > 0;
+      Found_Fuel := Ada.Strings.Fixed.Index (Buf (1 .. Last), "Fuel_Mass_kg") > 0;
+      Found_Pay := Ada.Strings.Fixed.Index (Buf (1 .. Last), "Payload_Net_kg") > 0;
+      Close (F);
+      Check (Found_Score and then
+               Ada.Strings.Fixed.Index (Buf (1 .. Last), "Reward_Coin") > 0,
+             "sim_run logs Score_kg_s,Reward_Coin");
+      Check (Found_Fuel and then Found_Pay,
+             "sim_run logs Fuel_Mass_kg,Payload_Net_kg");
+   end;
+
    New_Line;
    Put_Line ("Passed:" & Passed'Image & "  Failed:" & Failed'Image);
    if Failed > 0 then

@@ -15,7 +15,9 @@ Inspired by the public logistics-sim genre only.
 | **EU_Vehicle_Class** | `M1`–`M3`, `N1`–`N3`, `O1`–`O4` — inspired by EU vehicle categories VO 2018/858 |
 | **EU_Class_M1** | `Car_Small`, `Car_Medium`, `Car_Large` (passenger size tags) |
 | **Physical** | `Mass_Kilograms`, `GVW_Kilograms`, `Footprint_Length_m`, `Footprint_Width_m` — see [Physical_Data.md](Physical_Data.md) |
-| **Cargo_Class** | Silo / Tank / Lowboy / Reefer / Flatbed / Container |
+| **Cargo_Class** | Silo / Tank / Lowboy / Reefer / Flatbed / Container / Dry_Box |
+| **Cargo_Kind** | `Food_Dry`, `Food_Cold`, `Cosmetics`, `Pharma_Cold` (density / T / hazard lean) |
+| **Position_m** | Hub SI `(X,Y,Z)`; origin `Terra_0` |
 | **Dispatch_Mode** | `Road`, `Rail`, `Sea`, `Air`, `Space_Haul`, `Tunnel` |
 | **Haul_Mode** | `Road`, `Tunnel`, `Space_Haul` — ambient + insurance |
 | **City** | `Has_Rail`; optional airport, port, **spaceport**, **tunnel** |
@@ -34,6 +36,7 @@ Inspired by the public logistics-sim genre only.
 | Reefer | Reefer | **Road / Tunnel only** |
 | Flatbed | Flatbed (+ van) | Rail, Air, Tunnel |
 | Container | Container (+ van partial) | Rail, Air, Sea, **Space_Haul**, Tunnel |
+| Dry_Box | Dry_Box (+ van) | Rail, Air, Sea, Tunnel |
 
 ### Space_Haul ≅ Air
 
@@ -123,7 +126,7 @@ Flags: `-gnatwa -gnat2022 -gnata`. Mains: `tests.adb`, `play.adb`.
 
 1. List / seed jobs  2. Assign vehicle → `En_Route`, `ETA_s = Distance_m / Speed`
 3. Tick: wall Δt × `Time_Rate` → `Elapsed_s`; deliver when `Elapsed_s >= ETA_s`
-4. Menu: `[j]obs [a]ssign [t]/Enter tick [r]ate [s]paceports [e]vo [q]uit`
+4. Menu: `[j]obs [a]ssign [t]/Enter tick [r]ate [s]paceports [e]vo [u]ourney [q]uit`
 
 
 ## License

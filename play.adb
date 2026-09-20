@@ -70,6 +70,7 @@ procedure Play is
       Preferred        => Barge_Inner,
       Cell_Id          => 1);
    Demo_T_s : Float := 0.0;
+   Demo_Tournament : Tournament_State;
 
    procedure Show_Evo is
       Dist : constant Float := Demo_Cell.Distance_m;
@@ -159,7 +160,7 @@ procedure Play is
 
 begin
    Seed;
-   Put_Line ("Ada Logistics MVP — [j]obs [a]ssign [t]/Enter tick [r]ate [s]paceports [e]vo [q]uit");
+   Put_Line ("Ada Logistics MVP — [j]obs [a]ssign [t]/Enter tick [r]ate [s]paceports [e]vo [u]ourney [q]uit");
    Put_Line ("Time_Rate default demo 60.0 (wall*rate → sim seconds)");
    Show_Jobs;
 
@@ -193,6 +194,16 @@ begin
             Life_Tick
               (Demo_Cell, 3600.0, Demo_T_s,
                Time_Rate => Time_Rate_Of (C));
+            Show_Evo;
+         when 'u' | 'U' =>
+            -- Optional tournament: N ticks, Score_kg_s / Reward_Coin
+            Run_Tournament_Ticks
+              (Demo_Cell, Demo_Tournament, N_Ticks => 5, Delta_s => 3600.0,
+               T0_s => Demo_T_s, Time_Rate => Time_Rate_Of (C));
+            Demo_T_s := Demo_T_s + 5.0 * 3600.0;
+            Put_Line ("tournament 5 ticks winner="
+                      & Tournament_Winner
+                          (Demo_Tournament, Demo_Cell.Distance_m)'Image);
             Show_Evo;
          when 'r' | 'R' =>
             declare

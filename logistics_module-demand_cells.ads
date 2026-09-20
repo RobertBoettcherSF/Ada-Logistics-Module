@@ -57,6 +57,99 @@ package Logistics_Module.Demand_Cells is
    Barge_Gross_Mass_kg : constant Float := Barge_Inner_Profile.Gross_Mass_kg;
    Barge_Cargo_Mass_kg : constant Float := Barge_Inner_Profile.Cargo_Mass_kg;
 
+   ------------------------------------------------------------------
+   -- Consumables SI helpers (crew demand → min cruise)
+   ------------------------------------------------------------------
+   Consumables_kg_person_day : constant Float := 2.5;
+   Seconds_Per_Day_s         : constant Float := 86_400.0;
+   Crew_150                  : constant Natural := 150;
+
+   function Demand_Rate_kg_s
+     (Crew               : Natural;
+      Kg_Per_Person_Day  : Float := Consumables_kg_person_day) return Float
+   with
+     Post => Demand_Rate_kg_s'Result =
+       Float (Crew) * Kg_Per_Person_Day / Seconds_Per_Day_s;
+
+   -- Round-trip sustain: Demand * 2 * Distance / Cargo
+   function Min_Cruise_Speed_m_s
+     (Demand_Rate_kg_s : Float;
+      Distance_m       : Float;
+      Cargo_Mass_kg    : Float) return Float
+   with
+     Pre  => Cargo_Mass_kg > 0.0 and then Distance_m >= 0.0,
+     Post => Min_Cruise_Speed_m_s'Result =
+       Demand_Rate_kg_s * 2.0 * Distance_m / Cargo_Mass_kg;
+
+   ------------------------------------------------------------------
+   -- Tournament MVP — single metric Score_kg_s (Fitness unchanged).
+   -- Fuel_Mass_kg = Fuel_Coeff_kg * (Cruise / Speed_Ref)**2
+   -- Payload_Net_kg = max(0, Cargo_Mass_kg - Fuel_Mass_kg)
+   -- Score_kg_s = Payload_Net_kg / Transit_Duration_s  (one-way; /2 opt. RT)
+   -- Reward_Coin = 1.00 * (Score_kg_s / Score_Ref_kg_s);
+   -- Score_Ref from Barge_Inner at ref Distance_m. Cruise < c still.
+   ------------------------------------------------------------------
+   Reward_Coin_Base : constant Float := 1.00;
+
+   -- Lean fuel model (ops-owned). Speed_Ref = Barge_Inner cruise.
+   Fuel_Coeff_kg : constant Float := 50_000.0;
+   Speed_Ref_m_s : constant Float := Barge_Inner_Profile.Cruise_Speed_m_s;
+
+   type Species_Scores is array (Fleet_Species) of Float;
+   type Species_Rewards is array (Fleet_Species) of Float;
+   type Species_Fuel is array (Fleet_Species) of Float;
+   type Species_Payload is array (Fleet_Species) of Float;
+
+   type Tournament_State is record
+      Rewards        : Species_Rewards := [others => 0.0];
+      Scores         : Species_Scores := [others => 0.0];
+      Fuel           : Species_Fuel := [others => 0.0];
+      Payload        : Species_Payload := [others => 0.0];
+      Score_Ref_kg_s : Float := 0.0;
+      Distance_Ref_m : Float := 0.0;
+      Active         : Boolean := False;
+   end record;
+
+   function Fuel_Mass_kg (S : Fleet_Species) return Float
+   with
+     Pre  => Cruise_Speed_m_s (S) < Float (c_m_s),
+     Post => Fuel_Mass_kg'Result >= 0.0;
+
+   function Payload_Net_kg (S : Fleet_Species) return Float
+   with
+     Post => Payload_Net_kg'Result >= 0.0;
+
+   function Score_kg_s
+     (S          : Fleet_Species;
+      Distance_m : Float) return Float
+   with
+     Pre => Distance_m > 0.0 and then Cruise_Speed_m_s (S) < Float (c_m_s);
+
+   function Score_Ref_kg_s (Distance_m : Float) return Float
+   with
+     Pre  => Distance_m > 0.0,
+     Post => Score_Ref_kg_s'Result = Score_kg_s (Barge_Inner, Distance_m);
+
+   function Reward_Coin
+     (S          : Fleet_Species;
+      Distance_m : Float;
+      Score_Ref  : Float) return Float
+   with
+     Pre => Distance_m > 0.0 and then Score_Ref > 0.0;
+
+   procedure Accrue_Rewards
+     (State      : in out Tournament_State;
+      Distance_m : Float)
+   with
+     Pre => Distance_m > 0.0;
+
+   -- Winner = max Reward_Coin sum (≡ max Score); ties → higher Fitness
+   function Tournament_Winner
+     (State      : Tournament_State;
+      Distance_m : Float) return Fleet_Species
+   with
+     Pre => Distance_m > 0.0;
+
    type Species_Counts is array (Fleet_Species) of Natural;
 
    ------------------------------------------------------------------
@@ -141,9 +234,13 @@ package Logistics_Module.Demand_Cells is
       Run_Id    : String := "");
 
    procedure Append_Sim_Rows
-     (Cell : Demand_Cell;
-      T_s  : Float;
-      Path : String := Sim_Log_Path);
+     (Cell     : Demand_Cell;
+      T_s      : Float;
+      Path     : String := Sim_Log_Path;
+      Scores   : Species_Scores := [others => 0.0];
+      Rewards  : Species_Rewards := [others => 0.0];
+      Fuel     : Species_Fuel := [others => 0.0];
+      Payload  : Species_Payload := [others => 0.0]);
 
    -- Life: under-served → spawn/prefer higher Fitness; over-served → cull lower
    -- Appends sim_run.csv when Log (default).
@@ -153,6 +250,19 @@ package Logistics_Module.Demand_Cells is
       T_s     : Float := 0.0;
       Log     : Boolean := True;
       Path    : String := Sim_Log_Path;
+      Time_Rate : Float := 1.0)
+   with
+     Pre => Delta_s >= 0.0;
+
+   -- N automated ticks; accrue Score/Reward; spawn biased to winners
+   procedure Run_Tournament_Ticks
+     (Cell      : in out Demand_Cell;
+      State     : in out Tournament_State;
+      N_Ticks   : Positive;
+      Delta_s   : Float;
+      T0_s      : Float := 0.0;
+      Log       : Boolean := True;
+      Path      : String := Sim_Log_Path;
       Time_Rate : Float := 1.0)
    with
      Pre => Delta_s >= 0.0;

@@ -2,6 +2,8 @@
 
 pragma Ada_2022;
 
+with Ada.Numerics.Elementary_Functions;
+
 package body Logistics_Module is
 
    use type Ada.Calendar.Time;
@@ -58,13 +60,157 @@ package body Logistics_Module is
                when Rail | Air | Sea | Space_Haul =>
                   return True;
             end case;
+         when Dry_Box_Cargo =>
+            case Mode is
+               when Road | Tunnel =>
+                  return Equip = Dry_Box;
+               when Rail | Air | Sea =>
+                  return True;
+               when Space_Haul =>
+                  return False;
+            end case;
       end case;
    end Compatible;
 
    function Van_Can_Carry (Cargo : Cargo_Class) return Boolean is
    begin
-      return Cargo = Flatbed_Cargo or else Cargo = Container_Cargo;
+      return Cargo = Flatbed_Cargo
+        or else Cargo = Container_Cargo
+        or else Cargo = Dry_Box_Cargo;
    end Van_Can_Carry;
+
+   function To_Cargo_Class (Kind : Cargo_Kind) return Cargo_Class is
+   begin
+      case Kind is
+         when Food_Dry =>
+            return Dry_Box_Cargo;
+         when Food_Cold | Pharma_Cold =>
+            return Reefer_Cargo;
+         when Cosmetics =>
+            return Dry_Box_Cargo;
+      end case;
+   end To_Cargo_Class;
+
+   function Primary_Body (Kind : Cargo_Kind) return Body_Kind is
+   begin
+      case Kind is
+         when Food_Dry | Cosmetics =>
+            return Dry_Box;
+         when Food_Cold | Pharma_Cold =>
+            return Reefer;
+      end case;
+   end Primary_Body;
+
+   function Allows_Body (Kind : Cargo_Kind; Equip : Body_Kind) return Boolean is
+   begin
+      case Kind is
+         when Food_Dry =>
+            return Equip = Dry_Box or else Equip = Container;
+         when Cosmetics =>
+            return Equip = Dry_Box;
+         when Food_Cold | Pharma_Cold =>
+            return Equip = Reefer;
+      end case;
+   end Allows_Body;
+
+   function Default_Hazard_Band (Kind : Cargo_Kind) return Hazard_Premium_Band is
+   begin
+      case Kind is
+         when Food_Dry =>
+            return None;  -- also allows Low via Hazard_Band_Allowed
+         when Food_Cold | Cosmetics =>
+            return Low;
+         when Pharma_Cold =>
+            return Mid;
+      end case;
+   end Default_Hazard_Band;
+
+   function Hazard_Band_Allowed
+     (Kind : Cargo_Kind; Band : Hazard_Premium_Band) return Boolean
+   is
+   begin
+      case Kind is
+         when Food_Dry =>
+            return Band in None | Low;
+         when Food_Cold | Cosmetics =>
+            return Band = Low;
+         when Pharma_Cold =>
+            return Band = Mid;
+      end case;
+   end Hazard_Band_Allowed;
+
+   function Density_kg_m3_Of (Kind : Cargo_Kind) return Float is
+   begin
+      case Kind is
+         when Food_Dry =>
+            return Density_Food_Dry_kg_m3;
+         when Cosmetics =>
+            return Density_Cosmetics_kg_m3;
+         when Food_Cold | Pharma_Cold =>
+            return 0.0;  -- reefer lean; density not primary DS
+      end case;
+   end Density_kg_m3_Of;
+
+   function Temp_Band_Of (Kind : Cargo_Kind) return Temp_Band_C is
+   begin
+      case Kind is
+         when Food_Cold =>
+            return Food_Cold_Temp;
+         when Pharma_Cold =>
+            return Pharma_Cold_Temp;
+         when Food_Dry | Cosmetics =>
+            return (Lo_C => 0.0, Hi_C => 0.0, Controlled => False);
+      end case;
+   end Temp_Band_Of;
+
+   function M1_Last_Mile_Ok (Kind : Cargo_Kind) return Boolean is
+   begin
+      return Kind = Food_Dry or else Kind = Cosmetics;
+   end M1_Last_Mile_Ok;
+
+   function Compatible
+     (Kind  : Cargo_Kind;
+      Equip : Body_Kind;
+      Mode  : Dispatch_Mode) return Boolean
+   is
+   begin
+      if not Allows_Body (Kind, Equip) then
+         return False;
+      end if;
+      -- Food_Dry may ride Container (class rules) or Dry_Box
+      if Kind = Food_Dry and then Equip = Container then
+         return Compatible (Container_Cargo, Container, Mode);
+      end if;
+      return Compatible (To_Cargo_Class (Kind), Equip, Mode);
+   end Compatible;
+
+   function Vehicle_Cargo_Ok
+     (Phys   : Vehicle_Physical;
+      Kind   : Cargo_Kind;
+      Equip  : Body_Kind;
+      Hazard : Hazard_Class := None) return Boolean
+   is
+      Band : constant Hazard_Premium_Band := Band_Of (Hazard);
+   begin
+      -- Reject cold cargo on Flatbed (and any non-allowed body)
+      if not Allows_Body (Kind, Equip) then
+         return False;
+      end if;
+
+      if Phys.EU_Class = M1 then
+         -- Extreme hazard banned on M1 Car_*
+         if Band = Extreme then
+            return False;
+         end if;
+         if not M1_Last_Mile_Ok (Kind) then
+            return False;
+         end if;
+         return True;
+      end if;
+
+      -- N1 van / N2-N3 bulk: body must match; hazard band advisory for kind
+      return True;
+   end Vehicle_Cargo_Ok;
 
    function Mode_Allows_Hazard
      (Mode : Dispatch_Mode; Hazard : Hazard_Class) return Boolean
@@ -317,6 +463,8 @@ package body Logistics_Module is
    function Profile_Of (World : World_Body) return World_Body_Profile is
    begin
       case World is
+         when Terra_0 =>
+            return Profile_Terra_0;
          when Venus_Cloud_Port =>
             return Profile_Venus_Cloud_Port;
          when Moon_Polar =>
@@ -327,6 +475,36 @@ package body Logistics_Module is
             return Profile_Titan;
       end case;
    end Profile_Of;
+
+   function Position_Of (World : World_Body) return Position_m is
+   begin
+      case World is
+         when Terra_0 =>
+            return Terra_Origin;
+         when Moon_Polar =>
+            return (X => Earth_Moon_Distance_m, Y => 0.0, Z => 0.0);
+         when Venus_Cloud_Port =>
+            return (X => 0.72 * Hub_AU_m, Y => 0.0, Z => 0.0);
+         when Mars =>
+            return (X => Mars_Offset_m, Y => 0.0, Z => 0.0);
+         when Titan =>
+            return (X => 9.5 * Hub_AU_m, Y => 0.0, Z => 0.0);
+      end case;
+   end Position_Of;
+
+   function Distance_m (A, B : Position_m) return Float is
+      DX : constant Float := A.X - B.X;
+      DY : constant Float := A.Y - B.Y;
+      DZ : constant Float := A.Z - B.Z;
+   begin
+      return Ada.Numerics.Elementary_Functions.Sqrt
+        (DX * DX + DY * DY + DZ * DZ);
+   end Distance_m;
+
+   function Distance_m (A, B : World_Body) return Float is
+   begin
+      return Distance_m (Position_Of (A), Position_Of (B));
+   end Distance_m;
 
    function Create_Company
      (Starting_Cash : Money;
@@ -356,6 +534,7 @@ package body Logistics_Module is
       Has_Spaceport          : Boolean := False;
       Has_Tunnel             : Boolean := False;
       Tunnel_Fire_Vent_Risk  : Boolean := False;
+      Position               : Position_m := Terra_Origin;
       Id                     : out City_Id)
    is
       N : Natural;
@@ -373,13 +552,24 @@ package body Logistics_Module is
          Has_Tunnel            => Has_Tunnel,
          Tunnel_Fire_Vent_Risk => Tunnel_Fire_Vent_Risk,
          Bound_Pad             => 1,
-         Has_Pad_Link          => False);
+         Has_Pad_Link          => False,
+         Position              => Position);
       N := Natural'Min (Name'Length, Loc_Name'Length);
       C.City_Names_A (Id) := [others => ' '];
       C.City_Names_A (Id) (1 .. N) :=
         Name (Name'First .. Name'First + N - 1);
       C.City_Lens (Id) := N;
    end Add_City;
+
+   function City_Distance_m
+     (C : Company; A, B : City_Id) return Float
+   is
+   begin
+      if Natural (A) > C.L_Count or else Natural (B) > C.L_Count then
+         raise Company_Error with "invalid city";
+      end if;
+      return Distance_m (C.Cities (A).Position, C.Cities (B).Position);
+   end City_Distance_m;
 
    function Get_City (C : Company; Id : City_Id) return City_Record is
    begin
@@ -782,6 +972,53 @@ package body Logistics_Module is
         (Origin      => Origin,
          Destination => Destination,
          Cargo       => Cargo,
+         Kind        => Food_Dry,
+         Has_Kind    => False,
+         Hazard      => Hazard,
+         Placard     => P,
+         Amount_FE   => Amount_FE,
+         Payment     => Payment,
+         Status      => Pending,
+         Mode        => Road,
+         others      => <>);
+      Success := True;
+   end Create_Order;
+
+   procedure Create_Order
+     (C           : in out Company;
+      Origin      : City_Id;
+      Destination : City_Id;
+      Kind        : Cargo_Kind;
+      Amount_FE   : Freight_Units;
+      Payment     : Money;
+      Id          : out Order_Id;
+      Success     : out Boolean;
+      Hazard      : Hazard_Class := None;
+      Placard     : Placard_Code := Empty_Placard)
+   is
+      P : Placard_Code := Placard;
+   begin
+      Success := False;
+      Id := 1;
+      if C.O_Count >= Max_Orders then
+         return;
+      end if;
+      if Natural (Origin) > C.L_Count
+        or else Natural (Destination) > C.L_Count
+      then
+         return;
+      end if;
+      if Hazard = None then
+         P := Empty_Placard;
+      end if;
+      C.O_Count := C.O_Count + 1;
+      Id := Order_Id (C.O_Count);
+      C.Orders (Id) :=
+        (Origin      => Origin,
+         Destination => Destination,
+         Cargo       => To_Cargo_Class (Kind),
+         Kind        => Kind,
+         Has_Kind    => True,
          Hazard      => Hazard,
          Placard     => P,
          Amount_FE   => Amount_FE,
@@ -949,6 +1186,7 @@ package body Logistics_Module is
      (C : Company; V : Vehicle_Record; O : Order_Record) return Boolean
    is
       Equip_Ok : Boolean;
+      Equip    : Body_Kind;
    begin
       if not V.Available or else V.Needs_Maintain or else V.Condition < 20 then
          return False;
@@ -957,19 +1195,44 @@ package body Logistics_Module is
          return False;
       end if;
 
-      case V.Kind is
-         when Light_Van =>
-            Equip_Ok := Van_Can_Carry (O.Cargo);
-         when Rigid =>
-            Equip_Ok := Compatible (O.Cargo, V.Attached_Body, Road);
-         when Artic_Tractor =>
-            if not V.Has_Body then
+      Equip := V.Attached_Body;
+
+      -- Product-kind orders: matrix + M1 last-mile / Extreme reject
+      if O.Has_Kind then
+         if not Vehicle_Cargo_Ok (V.Phys, O.Kind, Equip, O.Hazard) then
+            return False;
+         end if;
+         -- M1 cars are Light_Van + M1 phys; N1 van / N2-N3 still via Kind body
+         if V.Phys.EU_Class = M1 then
+            null;  -- Vehicle_Cargo_Ok already enforced last-mile
+         elsif V.Kind = Light_Van then
+            if not Van_Can_Carry (O.Cargo) then
                return False;
             end if;
-            Equip_Ok := Compatible (O.Cargo, V.Attached_Body, Road);
-      end case;
-      if not Equip_Ok then
-         return False;
+         elsif V.Kind = Artic_Tractor and then not V.Has_Body then
+            return False;
+         elsif not Compatible (O.Kind, Equip, Road) then
+            return False;
+         end if;
+      else
+         case V.Kind is
+            when Light_Van =>
+               -- M1 without Kind: no last-mile goods assign
+               if V.Phys.EU_Class = M1 then
+                  return False;
+               end if;
+               Equip_Ok := Van_Can_Carry (O.Cargo);
+            when Rigid =>
+               Equip_Ok := Compatible (O.Cargo, V.Attached_Body, Road);
+            when Artic_Tractor =>
+               if not V.Has_Body then
+                  return False;
+               end if;
+               Equip_Ok := Compatible (O.Cargo, V.Attached_Body, Road);
+         end case;
+         if not Equip_Ok then
+            return False;
+         end if;
       end if;
 
       if O.Hazard /= None then

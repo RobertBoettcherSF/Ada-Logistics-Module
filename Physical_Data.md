@@ -106,16 +106,24 @@ Extreme mode extras (compose): Space_Haul ×1.5 → **15.0**; Tunnel ×1.2 → *
 
 Pad_Reconcrete: landing Mass/GVW > Pad_Limit_kg → Cracked; Space_Haul blocked until Reconcrete_Hours (Tick advances repair).
 
-## Demand_Cells (barge SI)
+## Demand_Cells (evolutionary fleet, DS SI)
 
 | Constant | Value |
 |----------|-------|
-| Barge_Gross_Mass_kg | 1_900_000 |
-| Barge_Cargo_Mass_kg | 1_045_000 (0.55 × gross) |
-| Cruise_Speed_m_s (Space_Haul) | 3000 (MVP) |
+| c_m_s | 299_792_458 |
+| AU_m | ≈1.495978707×10¹¹ |
+| Max_Beta | 0.01 (relativistic stub) |
 
-Per cell: `Deficit_kg = max(0, Demand_Rate_kg_s × Horizon_s − Stock_kg)`;
-`Shipments_Needed = ceil(Deficit_kg / Barge_Cargo_Mass_kg)`;
-`Transit_Duration_s = Distance_m / Cruise_Speed_m_s`;
-`Throughput_kg_s = Fleet_In_Flight × Barge_Cargo_Mass_kg / (2 × Transit_Duration_s)`.
-Tick consumes stock and adds arrivals from throughput. Birth/death stubs later.
+| Species | Cruise m/s | Cargo kg | Gross kg |
+|---------|------------|----------|----------|
+| Barge_Inner | 3000 | 1_045_000 | 1_900_000 |
+| Fast_Courier | 30_000 | 50_000 | 100_000 |
+| Relativistic_Stub | β·c (β≤0.01) | 1000 | 5000 |
+
+Pre: `Cruise_Speed_m_s < c_m_s`.
+
+`Throughput = Count × Cargo / (2 × Distance / Cruise)`;
+`Fitness = Throughput / (Ship_Count × Gross_Mass_kg)`.
+`Life_Tick`: under-served → spawn/prefer higher Fitness; over-served → cull lower.
+Each tick appends `sim_run.csv`: comment `# run_id=…` then header
+`t_s,cell_id,…,beta,c_m_s`; one row per cell×species.

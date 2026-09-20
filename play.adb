@@ -5,6 +5,8 @@ pragma Ada_2022;
 with Ada.Text_IO;          use Ada.Text_IO;
 with Ada.Strings.Fixed;
 with Logistics_Module;     use Logistics_Module;
+with Logistics_Module.Demand_Cells;
+use Logistics_Module.Demand_Cells;
 
 procedure Play is
    C     : Company;
@@ -37,6 +39,7 @@ procedure Play is
          Add_Spaceport
            (C, "LunaRelay", Moon_Polar, 10_000, Sp_M, Ok_Sp);
       end;
+      Begin_Sim_Run (Time_Rate_Of (C), Sim_Log_Path);
    end Seed;
 
    procedure Show_Jobs is
@@ -56,6 +59,44 @@ procedure Play is
       Put_Line ("vehicles: " & Vehicle_Count (C)'Image
                & "  cash:" & Cash (C)'Image);
    end Show_Jobs;
+
+
+   Demo_Cell : Demand_Cell :=
+     (Demand_Rate_kg_s => 50.0,
+      Stock_kg         => 0.0,
+      Horizon_s        => 86_400.0,
+      Distance_m       => AU_m,
+      Fleet            => [Barge_Inner => 1, others => 0],
+      Preferred        => Barge_Inner,
+      Cell_Id          => 1);
+   Demo_T_s : Float := 0.0;
+
+   procedure Show_Evo is
+      Dist : constant Float := Demo_Cell.Distance_m;
+   begin
+      Put_Line ("-- evolutionary fleet --");
+      Put_Line ("  c=" & c_m_s'Image & " m/s  AU=" & AU_m'Image & " m");
+      Put_Line ("  Dist=" & Dist'Image & " m  deficit="
+                & Deficit_kg (Demo_Cell)'Image & " kg");
+      Put_Line ("  thr=" & Throughput_kg_s (Demo_Cell)'Image
+                & " kg/s  ships=" & Ship_Count (Demo_Cell)'Image
+                & " pref=" & Demo_Cell.Preferred'Image);
+      for S in Fleet_Species loop
+         Put ("  " & S'Image
+              & " n=" & Demo_Cell.Fleet (S)'Image
+              & " cruise=" & Cruise_Speed_m_s (S)'Image
+              & " fit=");
+         if Dist > 0.0 then
+            Put (Fitness (S, Dist, 1)'Image);
+         else
+            Put (" n/a");
+         end if;
+         New_Line;
+      end loop;
+      Put_Line ("  best=" & Best_Species (Dist)'Image
+                & " under=" & Under_Served (Demo_Cell)'Image
+                & " over=" & Over_Served (Demo_Cell)'Image);
+   end Show_Evo;
 
    procedure Show_Spaceports is
       Sp : Spaceport_Record;
@@ -118,7 +159,7 @@ procedure Play is
 
 begin
    Seed;
-   Put_Line ("Ada Logistics MVP — [j]obs [a]ssign [t]/Enter tick [r]ate [s]paceports [q]uit");
+   Put_Line ("Ada Logistics MVP — [j]obs [a]ssign [t]/Enter tick [r]ate [s]paceports [e]vo [q]uit");
    Put_Line ("Time_Rate default demo 60.0 (wall*rate → sim seconds)");
    Show_Jobs;
 
@@ -139,10 +180,20 @@ begin
             Do_Assign;
             Show_Jobs;
          when 't' | 'T' | ' ' =>
-            Put_Line ("tick");
+            Demo_T_s := Demo_T_s + 3600.0;
+            Life_Tick
+              (Demo_Cell, 3600.0, Demo_T_s,
+               Time_Rate => Time_Rate_Of (C));
+            Put_Line ("tick (+demand Life_Tick → sim_run.csv)");
             Show_Jobs;
          when 's' | 'S' =>
             Show_Spaceports;
+         when 'e' | 'E' =>
+            Demo_T_s := Demo_T_s + 3600.0;
+            Life_Tick
+              (Demo_Cell, 3600.0, Demo_T_s,
+               Time_Rate => Time_Rate_Of (C));
+            Show_Evo;
          when 'r' | 'R' =>
             declare
                Rraw : String (1 .. 20);

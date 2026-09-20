@@ -3,6 +3,8 @@
 pragma Ada_2022;
 
 with Ada.Text_IO; use Ada.Text_IO;
+with Ada.Directories;
+with Ada.Strings.Fixed;
 with Logistics_Module; use Logistics_Module;
 with Logistics_Module.Demand_Cells;
 use Logistics_Module.Demand_Cells;
@@ -670,49 +672,64 @@ begin
 
 
    ------------------------------------------------------------------
-   -- Demand_Cells: deficit / shipments / ETA (barge SI)
+   -- Demand_Cells: SI constants, fitness fleet, Life_Tick
    ------------------------------------------------------------------
    declare
       Cell : Demand_Cell;
+      Dist : constant Float := 1.0e11;  -- long haul (~0.67 AU)
+      F_Fast, F_Barge : Float;
    begin
+      Check (c_m_s = 299_792_458, "c_m_s constant");
+      Check (AU_m > 1.4e11 and then AU_m < 1.6e11, "AU_m SI ~1.496e11");
       Check (Barge_Gross_Mass_kg = 1_900_000.0, "barge gross 1.9e6 kg");
       Check (Barge_Cargo_Mass_kg = 1_045_000.0, "barge cargo 0.55 gross");
       Check (abs (Barge_Cargo_Mass_kg - 0.55 * Barge_Gross_Mass_kg) < 1.0,
              "cargo is 0.55 of gross");
+      Check (Cruise_Speed_m_s (Barge_Inner) = 3_000.0, "Barge_Inner cruise");
+      Check (Cruise_Speed_m_s (Fast_Courier) = 30_000.0, "Fast_Courier cruise");
+      Check (Cruise_Speed_m_s (Barge_Inner) < Float (c_m_s), "barge speed < c");
+      Check (Cruise_Speed_m_s (Fast_Courier) < Float (c_m_s), "fast speed < c");
+      Check (Cruise_Speed_m_s (Relativistic_Stub) < Float (c_m_s),
+             "relativistic stub speed < c");
+      Check (Cruise_Speed_m_s (Relativistic_Stub)
+             <= Max_Beta * Float (c_m_s) + 1.0,
+             "relativistic β≤0.01");
       Check (Cruise_Speed_m_s (Space_Haul) = 3_000.0,
              "cruise Space_Haul 3000");
 
-      -- Need 2.1e6 kg over horizon, stock 0 → deficit 2.1e6 → ceil(2.1e6/1.045e6)=3
+      F_Fast := Fitness (Fast_Courier, Dist, 1);
+      F_Barge := Fitness (Barge_Inner, Dist, 1);
+      Check (F_Fast > F_Barge,
+             "fitness Fast_Courier > Barge_Inner on long Distance");
+
+      -- Need 2.1e6 kg over horizon, stock 0 → deficit 2.1e6 → ceil(/1.045e6)=3
       Cell :=
         (Demand_Rate_kg_s => 210.0,
          Stock_kg         => 0.0,
          Horizon_s        => 10_000.0,
-         Distance_m       => 3_000_000.0,  -- 1000 s @ 3000 m/s
-         Fleet_In_Flight  => 0,
-         Mode             => Space_Haul);
+         Distance_m       => 3_000_000.0,  -- 1000 s @ barge 3000 m/s
+         Fleet            => [others => 0],
+         Preferred        => Barge_Inner,
+         Cell_Id          => 1);
       Check (Deficit_kg (Cell) = 2_100_000.0, "deficit rate*horizon");
       Check (Shipments_Needed (Cell) = 3, "ceil deficit/cargo → 3");
       Check (Transit_Duration_s (Cell) = 1_000.0, "transit 3e6/3000");
       Check (ETA_s (Cell) = 1_000.0, "ETA matches transit");
 
-      -- Stock covers need → deficit 0, shipments 0
       Cell.Stock_kg := 2_100_000.0;
       Check (Deficit_kg (Cell) = 0.0 and then Shipments_Needed (Cell) = 0,
              "full stock no deficit");
 
-      -- Partial stock: need 2.1e6, stock 1.055e6 → deficit 1.045e6 → 1 shipment
       Cell.Stock_kg := 1_055_000.0;
       Check (abs (Deficit_kg (Cell) - 1_045_000.0) < 0.1, "partial stock deficit");
       Check (Shipments_Needed (Cell) = 1, "one shipment covers remainder");
 
-      -- Throughput: 2 barges, round-trip 2*1000 s
-      -- thr = 2 * 1.045e6 / 2000 = 1045 kg/s
-      Cell.Fleet_In_Flight := 2;
+      -- Throughput: 2 barges, round-trip 2*1000 s → 1045 kg/s
+      Cell.Fleet (Barge_Inner) := 2;
       Cell.Stock_kg := 0.0;
       Check (abs (Throughput_kg_s (Cell) - 1_045.0) < 0.01,
              "throughput 2*cargo/(2*transit)");
 
-      -- Tick: consume 210 kg/s * 10 s = 2100; arrive 1045*10 = 10450
       Cell.Stock_kg := 5_000.0;
       Tick_Cell (Cell, 10.0);
       Check (abs (Cell.Stock_kg - (5_000.0 - 2_100.0 + 10_450.0)) < 0.1,
@@ -724,6 +741,62 @@ begin
       begin
          Check (abs (S - (5_000.0 - 2_100.0 + 10_450.0 + 100.0)) < 0.1,
                 "Apply_Arrival adds stock");
+      end;
+
+      -- Life_Tick under-served: prefer/spawn higher fitness
+      Cell :=
+        (Demand_Rate_kg_s => 1_000.0,
+         Stock_kg         => 0.0,
+         Horizon_s        => 1_000.0,
+         Distance_m       => Dist,
+         Fleet            => [others => 0],
+         Preferred        => Barge_Inner,
+         Cell_Id          => 1);
+      Check (Under_Served (Cell), "empty fleet under-served");
+      Life_Tick (Cell, 0.0, Log => False);
+      Check (Cell.Preferred = Best_Species (Dist),
+             "Life_Tick prefers best fitness species");
+      Check (Cell.Fleet (Cell.Preferred) = 1, "Life_Tick spawns one");
+
+      -- sim_run.csv: Begin + Life_Tick append (3 species rows each)
+      declare
+         Log_Path : constant String := "obj/sim_run_test.csv";
+         F : File_Type;
+         Lines : Natural := 0;
+         Buf : String (1 .. 512);
+         Last : Natural;
+         T : Float := 0.0;
+      begin
+         if Ada.Directories.Exists (Log_Path) then
+            Ada.Directories.Delete_File (Log_Path);
+         end if;
+         Cell.Cell_Id := 42;
+         Cell.Fleet := [others => 0];
+         Cell.Preferred := Barge_Inner;
+         Begin_Sim_Run (1.0, Log_Path, "test-run");
+         Check (Ada.Directories.Exists (Log_Path), "sim_run created");
+         Life_Tick (Cell, 1.0, T_s => T, Path => Log_Path, Time_Rate => 1.0);
+         T := T + 1.0;
+         Life_Tick (Cell, 1.0, T_s => T, Path => Log_Path, Time_Rate => 1.0);
+         Open (F, In_File, Log_Path);
+         while not End_Of_File (F) loop
+            Get_Line (F, Buf, Last);
+            Lines := Lines + 1;
+         end loop;
+         Close (F);
+         -- #comment + header + 2 ticks × 3 species = 8 lines
+         Check (Lines = 8, "sim_run comment+header+6 data rows");
+         Open (F, In_File, Log_Path);
+         Get_Line (F, Buf, Last);
+         Check (Buf (1 .. 2) = "# " or else Buf (1) = '#',
+                "sim_run first line comment");
+         Check (Ada.Strings.Fixed.Index (Buf (1 .. Last), "run_id=") > 0,
+                "sim_run run_id comment");
+         Get_Line (F, Buf, Last);
+         Check (Ada.Strings.Fixed.Index
+                  (Buf (1 .. Last), "t_s,cell_id,Demand_Rate_kg_s") = 1,
+                "sim_run SI header");
+         Close (F);
       end;
 
       On_Demand_Birth (Cell);

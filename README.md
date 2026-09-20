@@ -90,8 +90,9 @@ until repair hours elapse under `Tick`.
 
 ### Demand_Cells (child package)
 
-Conway-like supply/demand cells: barge SI, deficit → shipments, ETA from cruise
-speed, tick updates stock from arrivals. Life birth/death hooks are stubs.
+Evolutionary fleet (DS SI): `c_m_s`, `AU_m`; species `Barge_Inner` /
+`Fast_Courier` / `Relativistic_Stub` (β≤0.01); cruise &lt; c; Fitness =
+Throughput/(ships×gross); `Life_Tick` spawn/prefer/cull by Fitness; appends `sim_run.csv` (cell×species SI rows).
 
 ## Build
 
@@ -106,7 +107,7 @@ Flags: `-gnatwa -gnat2022 -gnata`. Mains: `tests.adb`, `play.adb`.
 
 1. List / seed jobs  2. Assign vehicle → `En_Route`, `ETA_s = Distance_m / Speed`
 3. Tick: wall Δt × `Time_Rate` → `Elapsed_s`; deliver when `Elapsed_s >= ETA_s`
-4. Menu: `[j]obs [a]ssign [t]/Enter tick [r]ate [q]uit` (auto-tick each line)
+4. Menu: `[j]obs [a]ssign [t]/Enter tick [r]ate [s]paceports [e]vo [q]uit`
 
 
 ## License

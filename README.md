@@ -1,22 +1,24 @@
 # Ada Logistics Module
 
-Clean-room **Ada 2022** library for a small logistics / forwarding company
-simulation (Step 1). Inspired by the public logistics-sim genre only.
+Clean-room **Ada 2022** logistics / forwarding library (Step 1).
+Inspired by the public logistics-sim genre only.
 
-**No proprietary assets, names, formulas, data, or manual text are included.**
+**No proprietary assets, names, formulas, manual text, or legal regulatory copy.**
 
-## Domain model (our types)
+## Domain model
 
-| Concept | Encoding |
-|---------|----------|
-| **Freight_Units (FE)** | `Natural` subtype — abstract cargo measure (not mixed SI) |
-| **Vehicle_Kind** | `Light_Van`, `Rigid`, `Artic_Tractor` (tractor alone = **0 FE**) |
+| Concept | Our encoding |
+|---------|----------------|
+| **Freight_Units (FE)** | `Natural` — not mixed SI |
+| **Vehicle_Kind** | `Light_Van`, `Rigid`, `Artic_Tractor` (alone = **0 FE**) |
 | **Body_Kind** | `Silo`, `Tank`, `Reefer`, `Flatbed`, `Container`, `Lowboy` |
-| **Cargo_Class** | Silo / Tank / Lowboy / Reefer / Flatbed / Container cargo |
+| **Cargo_Class** | Silo / Tank / Lowboy / Reefer / Flatbed / Container |
 | **Dispatch_Mode** | `Road`, `Rail`, `Sea`, `Air`, `Space` |
-| **City** | `Has_Rail` always `True`; optional `Has_Airport`, `Has_Port`, `Has_Spaceport` |
+| **City** | `Has_Rail` always true; optional airport, port, **spaceport** |
+| **Hazard_Class** | ADR-inspired lean 1–9 + `None` (clean-room labels) |
+| **Placard_Code** | 8-char data field (orange-plate style; no graphics) |
 
-### `Compatible (Cargo, Body, Mode)`
+### Cargo ↔ mode (`Compatible`)
 
 | Cargo | Road body | Also |
 |-------|-----------|------|
@@ -24,38 +26,34 @@ simulation (Step 1). Inspired by the public logistics-sim genre only.
 | Tank | Tank | Rail, Sea |
 | Lowboy | Lowboy | Rail, Sea |
 | Reefer | Reefer | **Road only** |
-| Flatbed | Flatbed (+ light van) | Rail, Air |
-| Container | Container (+ light van partial) | Rail, Air, Sea, **Space** |
+| Flatbed | Flatbed (+ van) | Rail, Air |
+| Container | Container (+ van partial) | Rail, Air, Sea, **Space** |
 
-Step-1 rule: **only `Container_Cargo` is compatible with `Space`.**
+### Space ≅ Air
 
-### Dispatch constraints
+`Space` uses the same facility pattern as `Air` (`Has_Spaceport` at both ends).
+Step-1 cargo: **Container only**. `Space_Cost_Factor` / `Space_Time_Factor`
+are higher than an air baseline (stubs for later costing).
 
-- **Road** — anytime (vehicle body / van / FE capacity apply)
-- **Rail** — reserved schedule-slot stub for origin→destination
-- **Air** — both cities `Has_Airport`
-- **Sea** — both cities `Has_Port`
-- **Space** — both cities `Has_Spaceport`
+### Dangerous goods (Step-1)
 
-Also: staff roles, cash + reputation, offer → `Accept_Offer`, vehicle maintain / attach-detach semi.
+- Order carries `Hazard_Class` + optional `Placard_Code`.
+- **Road** hazardous: `Vehicle_ADR_Approved`, active **Driver** with
+  `Driver_Has_ADR_Cert`, and **Tank** body when `Requires_Tank_Body`
+  (`Gases`, `Flammable_Liquids`).
+- **Air / Space** allow-list: **deny** `Explosives` and `Radioactive` by default
+  (`Mode_Allows_Hazard`).
 
-## Build & test
+Also: staff roles, cash + reputation, offers / `Accept_Offer`, maintain,
+rail schedule-slot stub.
+
+## Build
 
 ```bash
 make test
 ```
 
-Flags: `-gnatwa -gnat2022 -gnata`. No `main.adb` — entry point is `tests.adb`.
-
-## Layout
-
-```
-logistics_module.ads / .adb / .gpr
-Makefile
-tests.adb
-LICENSE   (MIT)
-README.md
-```
+Flags: `-gnatwa -gnat2022 -gnata`. No `main.adb` — `tests.adb` is the entry point.
 
 ## License
 

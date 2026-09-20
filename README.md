@@ -12,6 +12,9 @@ Inspired by the public logistics-sim genre only.
 | **Freight_Units (FE)** | `Natural` — not mixed SI |
 | **Vehicle_Kind** | `Light_Van`, `Rigid`, `Artic_Tractor` (alone = **0 FE**) |
 | **Body_Kind** | `Silo`, `Tank`, `Reefer`, `Flatbed`, `Container`, `Lowboy` |
+| **EU_Vehicle_Class** | `M1`–`M3`, `N1`–`N3`, `O1`–`O4` — inspired by EU vehicle categories VO 2018/858 |
+| **EU_Class_M1** | `Car_Small`, `Car_Medium`, `Car_Large` (passenger size tags) |
+| **Physical** | `Mass_Kilograms`, `GVW_Kilograms`, `Footprint_Length_m`, `Footprint_Width_m` — see [Physical_Data.md](Physical_Data.md) |
 | **Cargo_Class** | Silo / Tank / Lowboy / Reefer / Flatbed / Container |
 | **Dispatch_Mode** | `Road`, `Rail`, `Sea`, `Air`, `Space` |
 | **City** | `Has_Rail` always true; optional airport, port, **spaceport** |
@@ -46,6 +49,12 @@ are higher than an air baseline (stubs for later costing).
 
 Also: staff roles, cash + reputation, offers / `Accept_Offer`, maintain,
 rail schedule-slot stub.
+
+### EU classes (v0)
+
+Kind map: `Light_Van`→`N1`, `Rigid`→`N2`/`N3` by GVW, `Artic_Tractor`→`N3`,
+trailers→`O2`/`O4` stubs. Contracts: `GVW >= Curb_Mass`; goods capacity checks
+use class GVW limits (`N3` check cap 40_000 kg documented in Physical_Data).
 
 ## Build
 

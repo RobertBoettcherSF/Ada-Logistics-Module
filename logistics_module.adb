@@ -85,6 +85,129 @@ package body Logistics_Module is
       return Hazard = Gases or else Hazard = Flammable_Liquids;
    end Requires_Tank_Body;
 
+   function Profile_M1 (Size : EU_Class_M1) return Vehicle_Physical is
+   begin
+      case Size is
+         when Car_Small  => return M1_Car_Small;
+         when Car_Medium => return M1_Car_Medium;
+         when Car_Large  => return M1_Car_Large;
+      end case;
+   end Profile_M1;
+
+   function Footprint_Area_M2
+     (Length : Footprint_Length_m;
+      Width  : Footprint_Width_m) return Float
+   is
+   begin
+      return Float (Length) * Float (Width);
+   end Footprint_Area_M2;
+
+   function Masses_Valid
+     (Curb : Mass_Kilograms; GVW : GVW_Kilograms) return Boolean
+   is
+   begin
+      return GVW >= GVW_Kilograms (Curb);
+   end Masses_Valid;
+
+   function Class_GVW_Limit (Class : EU_Vehicle_Class) return GVW_Kilograms is
+   begin
+      case Class is
+         when N1 =>
+            return N1_GVW_Max;
+         when N2 =>
+            return N2_GVW_Max;
+         when N3 =>
+            return N3_GVW_Check_Cap;
+         when O2 =>
+            return O2_GVW_Stub_Max;
+         when O4 =>
+            return O4_GVW_Stub_Max;
+         when M1 =>
+            -- No N-style goods band; caller uses M1 size-tag GVW
+            return 0;
+         when M2 | M3 | O1 | O3 =>
+            return 0;  -- stubs
+      end case;
+   end Class_GVW_Limit;
+
+   function Within_GVW_Class_Limit
+     (Class : EU_Vehicle_Class; GVW : GVW_Kilograms) return Boolean
+   is
+      Limit : constant GVW_Kilograms := Class_GVW_Limit (Class);
+   begin
+      case Class is
+         when M1 =>
+            -- Passenger: accept if matches a size-tag profile GVW band
+            return GVW <= M1_Car_Large.GVW;
+         when M2 | M3 | O1 | O3 =>
+            return True;  -- stub: no enforced band yet
+         when N1 | N2 | N3 | O2 | O4 =>
+            return GVW <= Limit;
+      end case;
+   end Within_GVW_Class_Limit;
+
+   function Map_Kind_To_EU_Class
+     (Kind : Vehicle_Kind; GVW : GVW_Kilograms) return EU_Vehicle_Class
+   is
+   begin
+      case Kind is
+         when Light_Van =>
+            return N1;
+         when Rigid =>
+            if GVW <= N2_GVW_Max then
+               return N2;
+            else
+               return N3;
+            end if;
+         when Artic_Tractor =>
+            return N3;
+      end case;
+   end Map_Kind_To_EU_Class;
+
+   function Map_Trailer_To_EU_Class
+     (GVW : GVW_Kilograms) return EU_Vehicle_Class
+   is
+   begin
+      if GVW <= O2_GVW_Stub_Max then
+         return O2;
+      else
+         return O4;
+      end if;
+   end Map_Trailer_To_EU_Class;
+
+   function Default_Physical (Kind : Vehicle_Kind) return Vehicle_Physical is
+      P : Vehicle_Physical;
+   begin
+      case Kind is
+         when Light_Van =>
+            P := Van_N1;
+         when Rigid =>
+            P := Lorry_Rigid;
+            P.EU_Class := Map_Kind_To_EU_Class (Rigid, P.GVW);
+         when Artic_Tractor =>
+            P := Lorry_Artic;
+      end case;
+      return P;
+   end Default_Physical;
+
+   function Make_Physical
+     (Curb    : Mass_Kilograms;
+      GVW     : GVW_Kilograms;
+      Length  : Footprint_Length_m;
+      Width   : Footprint_Width_m;
+      Class   : EU_Vehicle_Class;
+      M1_Size : EU_Class_M1 := Car_Medium) return Vehicle_Physical
+   is
+   begin
+      return
+        (Curb_Mass => Curb,
+         GVW       => GVW,
+         Length_m  => Length,
+         Width_m   => Width,
+         EU_Class  => Class,
+         M1_Size   => M1_Size);
+   end Make_Physical;
+
    function Create_Company
      (Starting_Cash : Money;
       Starting_Rep  : Reputation_Points := 0) return Company
@@ -156,10 +279,19 @@ package body Logistics_Module is
       Cost         : Money;
       Id           : out Vehicle_Id;
       Success      : out Boolean;
-      ADR_Approved : Boolean := False)
+      ADR_Approved : Boolean := False;
+      Phys         : Vehicle_Physical :=
+        (Curb_Mass => 0,
+         GVW       => 0,
+         Length_m  => 0.0,
+         Width_m   => 0.0,
+         EU_Class  => N1,
+         M1_Size   => Car_Medium))
    is
-      Cap : Freight_Units := Capacity_FE;
-      HB  : Boolean := Has_Body;
+      Cap  : Freight_Units := Capacity_FE;
+      HB   : Boolean := Has_Body;
+      P    : Vehicle_Physical := Phys;
+      Cls  : EU_Vehicle_Class;
    begin
       Success := False;
       Id := 1;
@@ -174,6 +306,33 @@ package body Logistics_Module is
       elsif Kind = Light_Van then
          HB := True;
       end if;
+
+      -- Physical_Data defaults when GVW left at 0
+      if P.GVW = 0 then
+         P := Default_Physical (Kind);
+      else
+         if not Masses_Valid (P.Curb_Mass, P.GVW) then
+            return;
+         end if;
+         -- Map Kind→EU class unless caller set M1 (passenger) or O* trailer
+         if P.EU_Class not in M1 | O1 | O2 | O3 | O4 then
+            P.EU_Class := Map_Kind_To_EU_Class (Kind, P.GVW);
+         elsif P.EU_Class = M1 then
+            null;  -- keep M1 + size tag
+         end if;
+         if not Within_GVW_Class_Limit (P.EU_Class, P.GVW) then
+            return;
+         end if;
+      end if;
+
+      -- Capacity checks use GVW class limits (goods classes)
+      Cls := P.EU_Class;
+      if Cls in N1 | N2 | N3 | O2 | O4 then
+         if not Within_GVW_Class_Limit (Cls, P.GVW) then
+            return;
+         end if;
+      end if;
+
       C.Cash_Balance := C.Cash_Balance - Cost;
       C.V_Count := C.V_Count + 1;
       Id := Vehicle_Id (C.V_Count);
@@ -185,7 +344,8 @@ package body Logistics_Module is
          Condition            => 100,
          Available            => True,
          Needs_Maintain       => False,
-         Vehicle_ADR_Approved => ADR_Approved);
+         Vehicle_ADR_Approved => ADR_Approved,
+         Phys                 => P);
       Success := True;
    end Add_Vehicle;
 

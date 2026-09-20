@@ -241,6 +241,125 @@ begin
       Check (not Ok, "gases require tank body");
    end;
 
+   ------------------------------------------------------------------
+   -- EU vehicle class limits + M1 size tags (Physical_Data)
+   ------------------------------------------------------------------
+   declare
+      P       : Vehicle_Physical;
+      N2_Id   : Vehicle_Id;
+      N3_Id   : Vehicle_Id;
+      M1_Id   : Vehicle_Id;
+      Bad_Id  : Vehicle_Id;
+      Area    : Float;
+   begin
+      Check (Map_Kind_To_EU_Class (Light_Van, 3_500) = N1, "Light_Van→N1");
+      Check (Map_Kind_To_EU_Class (Rigid, 12_000) = N2, "Rigid GVW<=12t →N2");
+      Check (Map_Kind_To_EU_Class (Rigid, 18_000) = N3, "Rigid GVW>12t →N3");
+      Check (Map_Kind_To_EU_Class (Artic_Tractor, 40_000) = N3,
+             "Artic_Tractor→N3");
+      Check (Map_Trailer_To_EU_Class (3_000) = O2, "trailer stub O2");
+      Check (Map_Trailer_To_EU_Class (10_000) = O4, "trailer stub O4");
+
+      Check (Class_GVW_Limit (N1) = 3_500, "N1 GVW max 3500");
+      Check (Class_GVW_Limit (N2) = 12_000, "N2 GVW max 12000");
+      Check (Class_GVW_Limit (N3) = 40_000, "N3 check cap 40000");
+      Check (Within_GVW_Class_Limit (N1, 3_500), "N1 at limit ok");
+      Check (not Within_GVW_Class_Limit (N1, 3_501), "N1 over limit");
+      Check (Within_GVW_Class_Limit (N2, 12_000), "N2 at limit ok");
+      Check (not Within_GVW_Class_Limit (N2, 12_001), "N2 over limit");
+      Check (Within_GVW_Class_Limit (N3, 40_000), "N3 at artic cap ok");
+      Check (not Within_GVW_Class_Limit (N3, 40_001), "N3 over artic cap");
+
+      Check (Masses_Valid (1_100, 1_400), "GVW >= curb");
+      Check (not Masses_Valid (2_000, 1_500), "GVW < curb rejected");
+
+      P := Profile_M1 (Car_Small);
+      Check (P.EU_Class = M1 and then P.M1_Size = Car_Small
+               and then P.Curb_Mass = 1_100 and then P.GVW = 1_400
+               and then P.Length_m = 4.00 and then P.Width_m = 1.70,
+             "M1 Car_Small DS");
+      Area := Footprint_Area_M2 (P.Length_m, P.Width_m);
+      Check (Area > 6.7 and then Area < 6.9, "Car_Small area ~6.8");
+
+      P := Profile_M1 (Car_Medium);
+      Check (P.Curb_Mass = 1_500 and then P.GVW = 2_000
+               and then P.Length_m = 4.60 and then P.Width_m = 1.80,
+             "M1 Car_Medium DS");
+      Area := Footprint_Area_M2 (P.Length_m, P.Width_m);
+      Check (Area > 8.2 and then Area < 8.4, "Car_Medium area ~8.3");
+
+      P := Profile_M1 (Car_Large);
+      Check (P.Curb_Mass = 2_200 and then P.GVW = 3_000
+               and then P.Length_m = 5.00 and then P.Width_m = 2.00,
+             "M1 Car_Large DS");
+      Area := Footprint_Area_M2 (P.Length_m, P.Width_m);
+      Check (Area > 9.9 and then Area < 10.1, "Car_Large area ~10");
+
+      Check (Lorry_Rigid.Curb_Mass = 8_000 and then Lorry_Rigid.GVW = 18_000
+               and then Lorry_Rigid.Length_m = 8.00
+               and then Lorry_Rigid.Width_m = 2.50,
+             "lorry_size rigid DS");
+      Check (Lorry_Artic.Curb_Mass = 15_000 and then Lorry_Artic.GVW = 40_000
+               and then Lorry_Artic.Length_m = 16.50
+               and then Lorry_Artic.Width_m = 2.55,
+             "lorry_artic DS");
+
+      -- Default Physical on existing fleet kinds
+      Check (Get_Vehicle (C, 1).Phys.EU_Class = N1, "van stored as N1");
+      Check (Get_Vehicle (C, Tid).Phys.EU_Class = N3, "artic stored as N3");
+      Check (Get_Vehicle (C, 2).Phys.EU_Class = N3
+               and then Get_Vehicle (C, 2).Phys.GVW = 18_000,
+             "default rigid lorry → N3 by GVW");
+
+      -- Explicit N2 rigid (GVW within N2 band)
+      P := Make_Physical
+        (Curb => 6_000, GVW => 11_000,
+         Length => 7.50, Width => 2.50, Class => N2);
+      Add_Vehicle
+        (C, Rigid, Flatbed, True, 14, 1_000.00, N2_Id, Ok, Phys => P);
+      Check (Ok and then Get_Vehicle (C, N2_Id).Phys.EU_Class = N2,
+             "explicit N2 rigid");
+
+      -- N1 over class limit rejected
+      P := Make_Physical
+        (Curb => 2_000, GVW => 4_000,
+         Length => 5.50, Width => 2.00, Class => N1);
+      Add_Vehicle
+        (C, Light_Van, Flatbed, True, 4, 500.00, Bad_Id, Ok, Phys => P);
+      Check (not Ok, "N1 over GVW limit rejected");
+
+      -- GVW < curb rejected (via Masses_Valid path; avoid Pre on Make_Physical)
+      declare
+         Bad : constant Vehicle_Physical :=
+           (Curb_Mass => 5_000,
+            GVW       => 4_000,
+            Length_m  => 5.00,
+            Width_m   => 2.00,
+            EU_Class  => N2,
+            M1_Size   => Car_Medium);
+      begin
+         Add_Vehicle
+           (C, Rigid, Flatbed, True, 10, 500.00, Bad_Id, Ok, Phys => Bad);
+         Check (not Ok, "GVW < curb rejected on add");
+      end;
+
+      -- M1 passenger via size tag
+      P := Profile_M1 (Car_Medium);
+      Add_Vehicle
+        (C, Light_Van, Flatbed, True, 2, 500.00, M1_Id, Ok, Phys => P);
+      Check (Ok and then Get_Vehicle (C, M1_Id).Phys.EU_Class = M1
+               and then Get_Vehicle (C, M1_Id).Phys.M1_Size = Car_Medium,
+             "M1 Car_Medium vehicle");
+
+      -- N3 artic profile
+      Add_Vehicle
+        (C, Artic_Tractor, Flatbed, False, 0, 500.00, N3_Id, Ok,
+         Phys => Lorry_Artic);
+      Check (Ok and then Get_Vehicle (C, N3_Id).Phys.EU_Class = N3
+               and then Get_Vehicle (C, N3_Id).Phys.GVW = 40_000,
+             "N3 artic profile stored");
+   end;
+
    New_Line;
    Put_Line ("Passed:" & Passed'Image & "  Failed:" & Failed'Image);
    if Failed > 0 then

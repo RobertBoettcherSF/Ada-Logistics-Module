@@ -206,6 +206,118 @@ package Logistics_Module is
      Pre => Mode in Road | Tunnel | Space_Haul;
 
    ------------------------------------------------------------------
+   -- World_Body profiles + spaceport catalog (DS SI, lean).
+   ------------------------------------------------------------------
+   type World_Body is (Venus_Cloud_Port, Moon_Polar, Mars, Titan);
+
+   type Atmos_Kind is (CO2, Vacuum, Thin_CO2, N2_CH4);
+
+   type World_Body_Profile is record
+      Altitude_m       : Float := 0.0;
+      Ext_Pressure_kPa : Float := 0.0;
+      Temp_C_Lo        : Float := 0.0;
+      Temp_C_Hi        : Float := 0.0;
+      Gravity_g        : Float := 1.0;
+      Rad_uSv_Per_h_Lo : Float := 0.1;
+      Rad_uSv_Per_h_Hi : Float := 0.1;
+      Atmos            : Atmos_Kind := CO2;
+      Has_Spaceport    : Boolean := False;
+      Float_Pad        : Boolean := False;
+      Relay            : Boolean := False;
+   end record;
+
+   -- Venus cloud deck float port (~50 km): Earth-like P, warm CO2, g_eff≈0.90
+   Profile_Venus_Cloud_Port : constant World_Body_Profile :=
+     (Altitude_m       => 50_000.0,
+      Ext_Pressure_kPa => 101.0,
+      Temp_C_Lo        => 60.0,
+      Temp_C_Hi        => 75.0,
+      Gravity_g        => 0.90,
+      Rad_uSv_Per_h_Lo => 0.1,
+      Rad_uSv_Per_h_Hi => 0.2,
+      Atmos            => CO2,
+      Has_Spaceport    => True,
+      Float_Pad        => True,
+      Relay            => False);
+
+   -- Moon polar: vacuum, low g, high rad, relay flag
+   Profile_Moon_Polar : constant World_Body_Profile :=
+     (Altitude_m       => 0.0,
+      Ext_Pressure_kPa => 0.0,
+      Temp_C_Lo        => -230.0,
+      Temp_C_Hi        => -150.0,
+      Gravity_g        => 0.17,
+      Rad_uSv_Per_h_Lo => 50.0,
+      Rad_uSv_Per_h_Hi => 200.0,
+      Atmos            => Vacuum,
+      Has_Spaceport    => True,
+      Float_Pad        => False,
+      Relay            => True);
+
+   -- Mars surface (typical lean SI); many Spaceport_Ids share this profile
+   Profile_Mars : constant World_Body_Profile :=
+     (Altitude_m       => 0.0,
+      Ext_Pressure_kPa => 0.6,
+      Temp_C_Lo        => -60.0,
+      Temp_C_Hi        => 0.0,
+      Gravity_g        => 0.38,
+      Rad_uSv_Per_h_Lo => 10.0,
+      Rad_uSv_Per_h_Hi => 30.0,
+      Atmos            => Thin_CO2,
+      Has_Spaceport    => True,
+      Float_Pad        => False,
+      Relay            => False);
+
+   -- Titan surface; multiple pads share this profile
+   Profile_Titan : constant World_Body_Profile :=
+     (Altitude_m       => 0.0,
+      Ext_Pressure_kPa => 146.7,
+      Temp_C_Lo        => -180.0,
+      Temp_C_Hi        => -179.0,
+      Gravity_g        => 0.14,
+      Rad_uSv_Per_h_Lo => 0.01,
+      Rad_uSv_Per_h_Hi => 0.05,
+      Atmos            => N2_CH4,
+      Has_Spaceport    => True,
+      Float_Pad        => False,
+      Relay            => False);
+
+   function Profile_Of (World : World_Body) return World_Body_Profile
+   with
+     Post =>
+       (case World is
+          when Venus_Cloud_Port =>
+            Profile_Of'Result.Altitude_m = 50_000.0
+              and then Profile_Of'Result.Ext_Pressure_kPa = 101.0
+              and then Profile_Of'Result.Float_Pad,
+          when Moon_Polar =>
+            Profile_Of'Result.Ext_Pressure_kPa = 0.0
+              and then Profile_Of'Result.Relay,
+          when Mars =>
+            Profile_Of'Result.Gravity_g = 0.38,
+          when Titan =>
+            Profile_Of'Result.Atmos = N2_CH4);
+
+   type Spaceport_Id is new Positive;
+   type Pad_Status is (Ok, Cracked);
+
+   Max_Spaceports : constant := 32;
+   Default_Reconcrete_Hours : constant Float := 24.0;
+   Default_Pad_Limit_kg     : constant Mass_Kilograms := 40_000;
+
+   subtype Story_Text is String (1 .. 64);
+   Empty_Story : constant Story_Text := [others => ' '];
+
+   type Spaceport_Record is record
+      World              : World_Body := Mars;
+      Pad_Limit_kg       : Mass_Kilograms := Default_Pad_Limit_kg;
+      Status             : Pad_Status := Ok;
+      Repair_Hours_Left  : Float := 0.0;
+      Last_Story         : Story_Text := Empty_Story;
+      Last_Story_Len     : Natural := 0;
+   end record;
+
+   ------------------------------------------------------------------
    -- Hazard insurance premium bands + cover legs (clean-room).
    ------------------------------------------------------------------
    type Hazard_Premium_Band is (None, Low, Mid, High, Extreme);
@@ -302,6 +414,8 @@ package Logistics_Module is
       Has_Spaceport          : Boolean := False;
       Has_Tunnel             : Boolean := False;
       Tunnel_Fire_Vent_Risk  : Boolean := False;  -- lean flag
+      Bound_Pad              : Spaceport_Id := 1;
+      Has_Pad_Link           : Boolean := False;
    end record;
 
    type Staff_Role is (Dispatcher, Driver, Mechanic, Clerk, Manager);
@@ -378,6 +492,7 @@ package Logistics_Module is
    function Staff_Count (C : Company) return Natural;
    function Offer_Count (C : Company) return Natural;
    function City_Count (C : Company) return Natural;
+   function Spaceport_Count (C : Company) return Natural;
 
    procedure Add_City
      (C                      : in out Company;
@@ -391,6 +506,50 @@ package Logistics_Module is
 
    function Get_City (C : Company; Id : City_Id) return City_Record;
    function City_Name (C : Company; Id : City_Id) return String;
+
+   -- Catalog entry; many IDs may share the same World_Body profile (Mars/Titan)
+   procedure Add_Spaceport
+     (C            : in out Company;
+      Name         : String;
+      World        : World_Body;
+      Pad_Limit_kg : Mass_Kilograms := Default_Pad_Limit_kg;
+      Id           : out Spaceport_Id;
+      Success      : out Boolean);
+
+   function Get_Spaceport
+     (C : Company; Id : Spaceport_Id) return Spaceport_Record;
+
+   function Spaceport_Name (C : Company; Id : Spaceport_Id) return String;
+
+   function Spaceport_Profile
+     (C : Company; Id : Spaceport_Id) return World_Body_Profile;
+
+   -- Bind city ↔ pad; sets Has_Spaceport. Space_Haul blocked while Cracked.
+   procedure Bind_City_Pad
+     (C       : in out Company;
+      City    : City_Id;
+      Pad     : Spaceport_Id;
+      Success : out Boolean);
+
+   function Pad_Open (C : Company; Pad : Spaceport_Id) return Boolean;
+   -- True if pad exists and Status = Ok (not Cracked / unrepaired).
+
+   function City_Pad_Open (C : Company; City : City_Id) return Boolean;
+   -- Has_Spaceport and (no pad link or Pad_Open). Legacy cities without
+   -- a bound pad stay open when Has_Spaceport.
+
+   -- Event: if Landing_Mass_kg (Mass/GVW) > Pad_Limit_kg → Cracked;
+   -- blocks Space_Haul to/from pad until Reconcrete_Hours elapse (Tick).
+   -- Optional short English Story stored on the pad.
+   procedure Pad_Reconcrete
+     (C                : in out Company;
+      Pad              : Spaceport_Id;
+      Landing_Mass_kg  : Mass_Kilograms;
+      Cracked_Out      : out Boolean;
+      Reconcrete_Hours : Float := Default_Reconcrete_Hours;
+      Story            : String := "");
+
+   function Pad_Story (C : Company; Pad : Spaceport_Id) return String;
 
    procedure Add_Vehicle
      (C            : in out Company;
@@ -564,11 +723,18 @@ private
    type Rail_Slot_Array is array
      (Rail_Slot_Id range 1 .. Rail_Slot_Id (Max_Rail_Slots))
      of Rail_Slot_Record;
+   type Spaceport_Array is array
+     (Spaceport_Id range 1 .. Spaceport_Id (Max_Spaceports))
+     of Spaceport_Record;
 
    subtype Loc_Name is String (1 .. 32);
    type City_Names is array (City_Id range 1 .. City_Id (Max_Cities)) of Loc_Name;
    type City_Name_Lens is array (City_Id range 1 .. City_Id (Max_Cities))
      of Natural;
+   type Spaceport_Names is array
+     (Spaceport_Id range 1 .. Spaceport_Id (Max_Spaceports)) of Loc_Name;
+   type Spaceport_Name_Lens is array
+     (Spaceport_Id range 1 .. Spaceport_Id (Max_Spaceports)) of Natural;
 
    type Company is record
       Cash_Balance   : Money := 0.0;
@@ -585,6 +751,10 @@ private
       City_Names_A   : City_Names := [others => [others => ' ']];
       City_Lens      : City_Name_Lens := [others => 0];
       L_Count        : Natural := 0;
+      Spaceports     : Spaceport_Array;
+      Sp_Names       : Spaceport_Names := [others => [others => ' ']];
+      Sp_Lens        : Spaceport_Name_Lens := [others => 0];
+      Sp_Count       : Natural := 0;
       Rail_Slots     : Rail_Slot_Array;
       R_Count        : Natural := 0;
       Time_Rate      : Float := 1.0;

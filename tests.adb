@@ -4,6 +4,8 @@ pragma Ada_2022;
 
 with Ada.Text_IO; use Ada.Text_IO;
 with Logistics_Module; use Logistics_Module;
+with Logistics_Module.Demand_Cells;
+use Logistics_Module.Demand_Cells;
 
 procedure Tests is
    Failed : Natural := 0;
@@ -476,6 +478,141 @@ begin
 
 
    ------------------------------------------------------------------
+   -- World_Body profiles + spaceport catalog + Pad_Reconcrete
+   ------------------------------------------------------------------
+   declare
+      Sc          : Company;
+      Venus_P     : Spaceport_Id;
+      Moon_P      : Spaceport_Id;
+      Mars_A, Mars_B : Spaceport_Id;
+      Titan_1, Titan_2 : Spaceport_Id;
+      Ca, Cb      : City_Id;
+      Oid         : Order_Id;
+      Off         : Offer_Id;
+      Success     : Boolean;
+      Cracked     : Boolean;
+      Sp          : Spaceport_Record;
+      Prof        : World_Body_Profile;
+      Sid         : Staff_Id;
+   begin
+      -- Catalog SI: Venus cloud P/alt
+      Prof := Profile_Of (Venus_Cloud_Port);
+      Check (Prof.Altitude_m = 50_000.0
+               and then Prof.Ext_Pressure_kPa = 101.0
+               and then Prof.Temp_C_Lo = 60.0
+               and then Prof.Temp_C_Hi = 75.0
+               and then Prof.Gravity_g = 0.90
+               and then Prof.Atmos = CO2
+               and then Prof.Float_Pad
+               and then Prof.Has_Spaceport,
+             "Venus_Cloud_Port P/alt/g float pad");
+
+      Prof := Profile_Of (Moon_Polar);
+      Check (Prof.Ext_Pressure_kPa = 0.0
+               and then Prof.Gravity_g = 0.17
+               and then Prof.Rad_uSv_Per_h_Hi >= 50.0
+               and then Prof.Relay,
+             "Moon_Polar vacuum g relay");
+
+      Prof := Profile_Of (Mars);
+      Check (Prof.Ext_Pressure_kPa = 0.6 and then Prof.Gravity_g = 0.38,
+             "Mars surface P/g");
+      Prof := Profile_Of (Titan);
+      Check (Prof.Ext_Pressure_kPa = 146.7 and then Prof.Gravity_g = 0.14
+               and then Prof.Atmos = N2_CH4,
+             "Titan surface P/g");
+
+      Sc := Create_Company (100_000.00);
+      Hire_Staff (Sc, Dispatcher, 1_000.00, Sid, Success);
+      Check (Success, "spaceport catalog dispatcher");
+
+      Add_Spaceport (Sc, "VenusFloat", Venus_Cloud_Port, 20_000, Venus_P, Success);
+      Check (Success, "add Venus float pad");
+      Check (Spaceport_Profile (Sc, Venus_P).Altitude_m = 50_000.0
+               and then Spaceport_Profile (Sc, Venus_P).Ext_Pressure_kPa = 101.0,
+             "Venus pad profile P/alt");
+
+      Add_Spaceport (Sc, "LunaRelay", Moon_Polar, 10_000, Moon_P, Success);
+      Check (Success and then Spaceport_Profile (Sc, Moon_P).Relay,
+             "Moon polar relay pad");
+
+      -- Mars: multiple Spaceport_Ids, same profile
+      Add_Spaceport (Sc, "AresGate", Mars, 40_000, Mars_A, Success);
+      Add_Spaceport (Sc, "VallesDock", Mars, 40_000, Mars_B, Success);
+      Check (Success and then Mars_A /= Mars_B, "Mars two pads distinct ids");
+      Check (Get_Spaceport (Sc, Mars_A).World = Mars
+               and then Get_Spaceport (Sc, Mars_B).World = Mars
+               and then Spaceport_Profile (Sc, Mars_A).Gravity_g =
+                 Spaceport_Profile (Sc, Mars_B).Gravity_g,
+             "Mars pads share profile");
+
+      -- Titan: multiple pads
+      Add_Spaceport (Sc, "KrakenPad", Titan, 15_000, Titan_1, Success);
+      Add_Spaceport (Sc, "OntarioPad", Titan, 15_000, Titan_2, Success);
+      Check (Success and then Titan_1 /= Titan_2
+               and then Get_Spaceport (Sc, Titan_1).World = Titan
+               and then Get_Spaceport (Sc, Titan_2).World = Titan,
+             "Titan multiple pads");
+      Check (Spaceport_Count (Sc) = 6, "spaceport catalog count 6");
+
+      -- Bind Venus + Moon for Space_Haul path
+      Add_City (Sc, "VenusCity", False, False, False, Id => Ca);
+      Add_City (Sc, "MoonCity", False, False, False, Id => Cb);
+      Bind_City_Pad (Sc, Ca, Venus_P, Success);
+      Check (Success and then Get_City (Sc, Ca).Has_Spaceport
+               and then Get_City (Sc, Ca).Has_Pad_Link,
+             "bind Venus city pad");
+      Bind_City_Pad (Sc, Cb, Moon_P, Success);
+      Check (Success and then City_Pad_Open (Sc, Ca)
+               and then City_Pad_Open (Sc, Cb),
+             "pads open before crack");
+
+      -- Crack threshold: mass > Pad_Limit
+      Pad_Reconcrete
+        (Sc, Venus_P, Landing_Mass_kg => 20_000,
+         Cracked_Out => Cracked, Reconcrete_Hours => 2.0,
+         Story => "within limit");
+      Check (not Cracked and then Get_Spaceport (Sc, Venus_P).Status = Pad_Status'Val (0),
+             "at pad limit no crack");
+
+      Pad_Reconcrete
+        (Sc, Venus_P, Landing_Mass_kg => 20_001,
+         Cracked_Out => Cracked, Reconcrete_Hours => 2.0,
+         Story => "pad cracked heavy lander");
+      Check (Cracked and then Get_Spaceport (Sc, Venus_P).Status = Pad_Status'Val (1),
+             "over pad limit → Cracked");
+      Check (Pad_Story (Sc, Venus_P) = "pad cracked heavy lander",
+             "optional story stored");
+      Check (not Pad_Open (Sc, Venus_P)
+               and then not City_Pad_Open (Sc, Ca),
+             "cracked pad closed");
+
+      -- Space_Haul blocked to/from cracked pad
+      Create_Order (Sc, Ca, Cb, Container_Cargo, 1, 1_000.00, Oid, Success);
+      Make_Offer (Sc, Oid, 1_000.00, Off, Success);
+      Accept_Offer (Sc, Off, Success);
+      Dispatch_Order (Sc, Oid, Space_Haul, Success => Success);
+      Check (not Success, "Space_Haul blocked while pad Cracked");
+
+      -- Repair via Tick: 2.0 hours → 7200 sim seconds
+      Set_Time_Rate (Sc, 1.0);
+      Tick_Delta (Sc, 3_600.0);  -- 1 h
+      Sp := Get_Spaceport (Sc, Venus_P);
+      Check (Sp.Status = Pad_Status'Val (1) and then Sp.Repair_Hours_Left > 0.0,
+             "half repair still Cracked");
+      Tick_Delta (Sc, 3_600.0);  -- 2nd hour clears
+      Check (Get_Spaceport (Sc, Venus_P).Status = Pad_Status'Val (0)
+               and then Pad_Open (Sc, Venus_P)
+               and then City_Pad_Open (Sc, Ca),
+             "repair clears after Reconcrete_Hours");
+
+      Dispatch_Order (Sc, Oid, Space_Haul, Success => Success);
+      Check (Success, "Space_Haul ok after pad repair");
+      Complete_Delivery (Sc, Oid, Success);
+      Check (Success, "space haul delivered post-repair");
+   end;
+
+   ------------------------------------------------------------------
    -- MVP ETA + tick deliver (inject time; no long sleep)
    ------------------------------------------------------------------
    declare
@@ -529,6 +666,69 @@ begin
       Set_Time_Rate (Pc, 10.0);
       Tick_Delta (Pc, 10.0);  -- sim += 100
       Check (Get_Order (Pc, O).Status = Delivered, "Time_Rate 10 delivers");
+   end;
+
+
+   ------------------------------------------------------------------
+   -- Demand_Cells: deficit / shipments / ETA (barge SI)
+   ------------------------------------------------------------------
+   declare
+      Cell : Demand_Cell;
+   begin
+      Check (Barge_Gross_Mass_kg = 1_900_000.0, "barge gross 1.9e6 kg");
+      Check (Barge_Cargo_Mass_kg = 1_045_000.0, "barge cargo 0.55 gross");
+      Check (abs (Barge_Cargo_Mass_kg - 0.55 * Barge_Gross_Mass_kg) < 1.0,
+             "cargo is 0.55 of gross");
+      Check (Cruise_Speed_m_s (Space_Haul) = 3_000.0,
+             "cruise Space_Haul 3000");
+
+      -- Need 2.1e6 kg over horizon, stock 0 → deficit 2.1e6 → ceil(2.1e6/1.045e6)=3
+      Cell :=
+        (Demand_Rate_kg_s => 210.0,
+         Stock_kg         => 0.0,
+         Horizon_s        => 10_000.0,
+         Distance_m       => 3_000_000.0,  -- 1000 s @ 3000 m/s
+         Fleet_In_Flight  => 0,
+         Mode             => Space_Haul);
+      Check (Deficit_kg (Cell) = 2_100_000.0, "deficit rate*horizon");
+      Check (Shipments_Needed (Cell) = 3, "ceil deficit/cargo → 3");
+      Check (Transit_Duration_s (Cell) = 1_000.0, "transit 3e6/3000");
+      Check (ETA_s (Cell) = 1_000.0, "ETA matches transit");
+
+      -- Stock covers need → deficit 0, shipments 0
+      Cell.Stock_kg := 2_100_000.0;
+      Check (Deficit_kg (Cell) = 0.0 and then Shipments_Needed (Cell) = 0,
+             "full stock no deficit");
+
+      -- Partial stock: need 2.1e6, stock 1.055e6 → deficit 1.045e6 → 1 shipment
+      Cell.Stock_kg := 1_055_000.0;
+      Check (abs (Deficit_kg (Cell) - 1_045_000.0) < 0.1, "partial stock deficit");
+      Check (Shipments_Needed (Cell) = 1, "one shipment covers remainder");
+
+      -- Throughput: 2 barges, round-trip 2*1000 s
+      -- thr = 2 * 1.045e6 / 2000 = 1045 kg/s
+      Cell.Fleet_In_Flight := 2;
+      Cell.Stock_kg := 0.0;
+      Check (abs (Throughput_kg_s (Cell) - 1_045.0) < 0.01,
+             "throughput 2*cargo/(2*transit)");
+
+      -- Tick: consume 210 kg/s * 10 s = 2100; arrive 1045*10 = 10450
+      Cell.Stock_kg := 5_000.0;
+      Tick_Cell (Cell, 10.0);
+      Check (abs (Cell.Stock_kg - (5_000.0 - 2_100.0 + 10_450.0)) < 0.1,
+             "tick consume + arrival throughput");
+
+      Apply_Arrival (Cell, 100.0);
+      declare
+         S : constant Float := Cell.Stock_kg;
+      begin
+         Check (abs (S - (5_000.0 - 2_100.0 + 10_450.0 + 100.0)) < 0.1,
+                "Apply_Arrival adds stock");
+      end;
+
+      On_Demand_Birth (Cell);
+      On_Demand_Death (Cell);
+      Check (True, "demand birth/death stubs callable");
    end;
 
    New_Line;

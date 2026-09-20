@@ -93,3 +93,29 @@ Extreme mode extras (compose): Space_Haul ×1.5 → **15.0**; Tunnel ×1.2 → *
 | Space_Haul | 3000 |
 
 `ETA_s = Distance_m / Speed_m_s`. Sim time: wall Δt × `Time_Rate` (default 1.0).
+
+
+## World_Body / spaceport SI (lean)
+
+| World_Body | Alt m | Ext P kPa | T °C | g | Atmos | Flags |
+|------------|-------|-----------|------|---|-------|-------|
+| Venus_Cloud_Port | 50_000 | ≈101 | 60–75 | ≈0.90 | CO2 | Has_Spaceport, Float_Pad |
+| Moon_Polar | 0 | 0 | cold | ≈0.17 | Vacuum | high rad, Relay |
+| Mars | 0 | ≈0.6 | surface | ≈0.38 | Thin_CO2 | many Spaceport_Ids |
+| Titan | 0 | ≈146.7 | ≈−180 | ≈0.14 | N2_CH4 | many pads |
+
+Pad_Reconcrete: landing Mass/GVW > Pad_Limit_kg → Cracked; Space_Haul blocked until Reconcrete_Hours (Tick advances repair).
+
+## Demand_Cells (barge SI)
+
+| Constant | Value |
+|----------|-------|
+| Barge_Gross_Mass_kg | 1_900_000 |
+| Barge_Cargo_Mass_kg | 1_045_000 (0.55 × gross) |
+| Cruise_Speed_m_s (Space_Haul) | 3000 (MVP) |
+
+Per cell: `Deficit_kg = max(0, Demand_Rate_kg_s × Horizon_s − Stock_kg)`;
+`Shipments_Needed = ceil(Deficit_kg / Barge_Cargo_Mass_kg)`;
+`Transit_Duration_s = Distance_m / Cruise_Speed_m_s`;
+`Throughput_kg_s = Fleet_In_Flight × Barge_Cargo_Mass_kg / (2 × Transit_Duration_s)`.
+Tick consumes stock and adds arrivals from throughput. Birth/death stubs later.

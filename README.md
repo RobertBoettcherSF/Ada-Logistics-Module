@@ -82,6 +82,17 @@ Kind map: `Light_Van`→`N1`, `Rigid`→`N2`/`N3` by GVW, `Artic_Tractor`→`N3`
 trailers→`O2`/`O4` stubs. Contracts: `GVW >= Curb_Mass`; goods capacity checks
 use class GVW limits (`N3` check cap 40_000 kg documented in Physical_Data).
 
+### Spaceports / Pad_Reconcrete
+
+`World_Body` profiles (Venus_Cloud_Port, Moon_Polar, Mars, Titan) feed a spaceport
+catalog. Overweight landing (`Pad_Reconcrete`) cracks a pad and blocks `Space_Haul`
+until repair hours elapse under `Tick`.
+
+### Demand_Cells (child package)
+
+Conway-like supply/demand cells: barge SI, deficit → shipments, ETA from cruise
+speed, tick updates stock from arrivals. Life birth/death hooks are stubs.
+
 ## Build
 
 ```bash

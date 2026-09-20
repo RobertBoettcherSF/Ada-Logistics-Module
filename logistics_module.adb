@@ -314,6 +314,20 @@ package body Logistics_Module is
       return Selected_Cover_Sum (Selected) * Premium_Factor (Hazard, Mode);
    end Total_Premium_Factor;
 
+   function Profile_Of (World : World_Body) return World_Body_Profile is
+   begin
+      case World is
+         when Venus_Cloud_Port =>
+            return Profile_Venus_Cloud_Port;
+         when Moon_Polar =>
+            return Profile_Moon_Polar;
+         when Mars =>
+            return Profile_Mars;
+         when Titan =>
+            return Profile_Titan;
+      end case;
+   end Profile_Of;
+
    function Create_Company
      (Starting_Cash : Money;
       Starting_Rep  : Reputation_Points := 0) return Company
@@ -332,6 +346,7 @@ package body Logistics_Module is
    function Staff_Count (C : Company) return Natural is (C.S_Count);
    function Offer_Count (C : Company) return Natural is (C.Off_Count);
    function City_Count (C : Company) return Natural is (C.L_Count);
+   function Spaceport_Count (C : Company) return Natural is (C.Sp_Count);
 
    procedure Add_City
      (C                      : in out Company;
@@ -356,7 +371,9 @@ package body Logistics_Module is
          Has_Port              => Has_Port,
          Has_Spaceport         => Has_Spaceport,
          Has_Tunnel            => Has_Tunnel,
-         Tunnel_Fire_Vent_Risk => Tunnel_Fire_Vent_Risk);
+         Tunnel_Fire_Vent_Risk => Tunnel_Fire_Vent_Risk,
+         Bound_Pad             => 1,
+         Has_Pad_Link          => False);
       N := Natural'Min (Name'Length, Loc_Name'Length);
       C.City_Names_A (Id) := [others => ' '];
       C.City_Names_A (Id) (1 .. N) :=
@@ -379,6 +396,174 @@ package body Logistics_Module is
       end if;
       return C.City_Names_A (Id) (1 .. C.City_Lens (Id));
    end City_Name;
+
+   procedure Add_Spaceport
+     (C            : in out Company;
+      Name         : String;
+      World        : World_Body;
+      Pad_Limit_kg : Mass_Kilograms := Default_Pad_Limit_kg;
+      Id           : out Spaceport_Id;
+      Success      : out Boolean)
+   is
+      N : Natural;
+   begin
+      Success := False;
+      Id := 1;
+      if C.Sp_Count >= Max_Spaceports then
+         return;
+      end if;
+      C.Sp_Count := C.Sp_Count + 1;
+      Id := Spaceport_Id (C.Sp_Count);
+      C.Spaceports (Id) :=
+        (World             => World,
+         Pad_Limit_kg      => Pad_Limit_kg,
+         Status            => Ok,
+         Repair_Hours_Left => 0.0,
+         Last_Story        => Empty_Story,
+         Last_Story_Len    => 0);
+      N := Natural'Min (Name'Length, Loc_Name'Length);
+      C.Sp_Names (Id) := [others => ' '];
+      if N > 0 then
+         C.Sp_Names (Id) (1 .. N) :=
+           Name (Name'First .. Name'First + N - 1);
+      end if;
+      C.Sp_Lens (Id) := N;
+      Success := True;
+   end Add_Spaceport;
+
+   function Get_Spaceport
+     (C : Company; Id : Spaceport_Id) return Spaceport_Record
+   is
+   begin
+      if Natural (Id) > C.Sp_Count then
+         raise Company_Error with "invalid spaceport";
+      end if;
+      return C.Spaceports (Id);
+   end Get_Spaceport;
+
+   function Spaceport_Name (C : Company; Id : Spaceport_Id) return String is
+   begin
+      if Natural (Id) > C.Sp_Count then
+         raise Company_Error with "invalid spaceport";
+      end if;
+      return C.Sp_Names (Id) (1 .. C.Sp_Lens (Id));
+   end Spaceport_Name;
+
+   function Spaceport_Profile
+     (C : Company; Id : Spaceport_Id) return World_Body_Profile
+   is
+   begin
+      if Natural (Id) > C.Sp_Count then
+         raise Company_Error with "invalid spaceport";
+      end if;
+      return Profile_Of (C.Spaceports (Id).World);
+   end Spaceport_Profile;
+
+   procedure Bind_City_Pad
+     (C       : in out Company;
+      City    : City_Id;
+      Pad     : Spaceport_Id;
+      Success : out Boolean)
+   is
+   begin
+      Success := False;
+      if Natural (City) > C.L_Count then
+         return;
+      end if;
+      if Natural (Pad) > C.Sp_Count then
+         return;
+      end if;
+      C.Cities (City).Has_Spaceport := True;
+      C.Cities (City).Bound_Pad := Pad;
+      C.Cities (City).Has_Pad_Link := True;
+      Success := True;
+   end Bind_City_Pad;
+
+   function Pad_Open (C : Company; Pad : Spaceport_Id) return Boolean is
+   begin
+      if Natural (Pad) > C.Sp_Count then
+         return False;
+      end if;
+      return C.Spaceports (Pad).Status = Ok;
+   end Pad_Open;
+
+   function City_Pad_Open (C : Company; City : City_Id) return Boolean is
+      Loc : City_Record;
+   begin
+      if Natural (City) > C.L_Count then
+         return False;
+      end if;
+      Loc := C.Cities (City);
+      if not Loc.Has_Spaceport then
+         return False;
+      end if;
+      if not Loc.Has_Pad_Link then
+         return True;  -- legacy Has_Spaceport without bound pad
+      end if;
+      return Pad_Open (C, Loc.Bound_Pad);
+   end City_Pad_Open;
+
+   procedure Pad_Reconcrete
+     (C                : in out Company;
+      Pad              : Spaceport_Id;
+      Landing_Mass_kg  : Mass_Kilograms;
+      Cracked_Out      : out Boolean;
+      Reconcrete_Hours : Float := Default_Reconcrete_Hours;
+      Story            : String := "")
+   is
+      N : Natural;
+   begin
+      Cracked_Out := False;
+      if Natural (Pad) > C.Sp_Count then
+         return;
+      end if;
+      N := Natural'Min (Story'Length, Story_Text'Length);
+      C.Spaceports (Pad).Last_Story := Empty_Story;
+      if N > 0 then
+         C.Spaceports (Pad).Last_Story (1 .. N) :=
+           Story (Story'First .. Story'First + N - 1);
+      end if;
+      C.Spaceports (Pad).Last_Story_Len := N;
+
+      if Landing_Mass_kg > C.Spaceports (Pad).Pad_Limit_kg then
+         C.Spaceports (Pad).Status := Cracked;
+         if Reconcrete_Hours > 0.0 then
+            C.Spaceports (Pad).Repair_Hours_Left := Reconcrete_Hours;
+         else
+            C.Spaceports (Pad).Repair_Hours_Left := Default_Reconcrete_Hours;
+         end if;
+         Cracked_Out := True;
+      end if;
+   end Pad_Reconcrete;
+
+   function Pad_Story (C : Company; Pad : Spaceport_Id) return String is
+   begin
+      if Natural (Pad) > C.Sp_Count then
+         raise Company_Error with "invalid spaceport";
+      end if;
+      return C.Spaceports (Pad).Last_Story
+        (1 .. C.Spaceports (Pad).Last_Story_Len);
+   end Pad_Story;
+
+   procedure Advance_Pad_Repairs (C : in out Company; Sim_Delta_s : Float) is
+      Hours : Float;
+   begin
+      if Sim_Delta_s <= 0.0 or else C.Sp_Count = 0 then
+         return;
+      end if;
+      Hours := Sim_Delta_s / 3600.0;
+      for I in Spaceport_Id range 1 .. Spaceport_Id (C.Sp_Count) loop
+         if C.Spaceports (I).Status = Cracked then
+            if C.Spaceports (I).Repair_Hours_Left > Hours then
+               C.Spaceports (I).Repair_Hours_Left :=
+                 C.Spaceports (I).Repair_Hours_Left - Hours;
+            else
+               C.Spaceports (I).Repair_Hours_Left := 0.0;
+               C.Spaceports (I).Status := Ok;
+            end if;
+         end if;
+      end loop;
+   end Advance_Pad_Repairs;
 
    procedure Add_Vehicle
      (C            : in out Company;
@@ -882,6 +1067,12 @@ package body Logistics_Module is
             if not Orig.Has_Spaceport or else not Dest.Has_Spaceport then
                return;
             end if;
+            -- Bound cracked pads block Space_Haul to/from that pad
+            if not City_Pad_Open (C, O.Origin)
+              or else not City_Pad_Open (C, O.Destination)
+            then
+               return;
+            end if;
             if not Cargo_Allows_Mode (O.Cargo, Space_Haul) then
                return;
             end if;
@@ -1020,6 +1211,14 @@ package body Logistics_Module is
          return;
       end if;
 
+      if Mode = Space_Haul then
+         if not City_Pad_Open (C, O.Origin)
+           or else not City_Pad_Open (C, O.Destination)
+         then
+            return;
+         end if;
+      end if;
+
       if Mode in Road | Tunnel then
          C.Vehicles (Vehicle).Available := False;
       end if;
@@ -1037,7 +1236,11 @@ package body Logistics_Module is
    procedure Advance_Elapsed (C : in out Company; Sim_Delta_s : Float) is
       Ok : Boolean;
    begin
-      if Sim_Delta_s <= 0.0 or else C.O_Count = 0 then
+      if Sim_Delta_s <= 0.0 then
+         return;
+      end if;
+      Advance_Pad_Repairs (C, Sim_Delta_s);
+      if C.O_Count = 0 then
          return;
       end if;
       for I in Order_Id range 1 .. Order_Id (C.O_Count) loop

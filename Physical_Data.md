@@ -83,3 +83,13 @@ Extreme mode extras (compose): Space_Haul ×1.5 → **15.0**; Tunnel ×1.2 → *
 | Emergency_Leave | 0.10 |
 
 `Total_Premium_Factor` = sum(selected legs) × `Premium_Factor(Hazard, Mode)`.
+
+## Haul speeds (MVP play)
+
+| Haul_Mode | Speed (m/s) |
+|-----------|-------------|
+| Road | 22 |
+| Tunnel | 30 |
+| Space_Haul | 3000 |
+
+`ETA_s = Distance_m / Speed_m_s`. Sim time: wall Δt × `Time_Rate` (default 1.0).

@@ -474,6 +474,63 @@ begin
              "N3 artic profile stored");
    end;
 
+
+   ------------------------------------------------------------------
+   -- MVP ETA + tick deliver (inject time; no long sleep)
+   ------------------------------------------------------------------
+   declare
+      Pc      : Company;
+      Ca, Cb  : City_Id;
+      V       : Vehicle_Id;
+      O       : Order_Id;
+      Ok      : Boolean;
+      Ord     : Order_Record;
+   begin
+      Check (Speed_Of (Road) = 22.0, "speed Road 22");
+      Check (Speed_Of (Tunnel) = 30.0, "speed Tunnel 30");
+      Check (Speed_Of (Space_Haul) = 3_000.0, "speed Space_Haul 3000");
+      Check (Compute_ETA_s (2_200.0, Road) = 100.0, "ETA Road 2200/22");
+      Check (Compute_ETA_s (3_000.0, Tunnel) = 100.0, "ETA Tunnel 3000/30");
+      Check (Compute_ETA_s (300_000.0, Space_Haul) = 100.0,
+             "ETA Space 300000/3000");
+
+      Pc := Create_Company (10_000.00);
+      Set_Time_Rate (Pc, 1.0);
+      Check (Time_Rate_Of (Pc) = 1.0, "Time_Rate default set 1");
+      Add_City (Pc, "X", False, False, Id => Ca);
+      Add_City (Pc, "Y", False, False, Id => Cb);
+      Add_Vehicle (Pc, Light_Van, Flatbed, True, 4, 1_000.00, V, Ok);
+      Check (Ok, "play fleet van");
+      Create_Order (Pc, Ca, Cb, Flatbed_Cargo, 1, 500.00, O, Ok);
+      Check (Ok, "play order");
+
+      Assign_Vehicle (Pc, O, V, 2_200.0, Road, Ok);
+      Check (Ok, "assign → En_Route");
+      Ord := Get_Order (Pc, O);
+      Check (Ord.Status = En_Route, "status En_Route");
+      Check (Ord.ETA_s = 100.0, "assigned ETA 100");
+      Check (Ord.Elapsed_s = 0.0, "elapsed starts 0");
+      Check (not Get_Vehicle (Pc, V).Available, "vehicle busy");
+
+      Tick_Delta (Pc, 50.0);
+      Ord := Get_Order (Pc, O);
+      Check (Ord.Status = En_Route and then Ord.Elapsed_s = 50.0,
+             "half way still En_Route");
+
+      Tick_Delta (Pc, 50.0);
+      Ord := Get_Order (Pc, O);
+      Check (Ord.Status = Delivered, "deliver when elapsed>=eta");
+      Check (Get_Vehicle (Pc, V).Available, "vehicle freed");
+      Check (Cash (Pc) = 9_500.00, "payment on deliver");
+
+      -- Time_Rate scales injected wall delta
+      Create_Order (Pc, Ca, Cb, Flatbed_Cargo, 1, 100.00, O, Ok);
+      Assign_Vehicle (Pc, O, V, 2_200.0, Road, Ok);
+      Set_Time_Rate (Pc, 10.0);
+      Tick_Delta (Pc, 10.0);  -- sim += 100
+      Check (Get_Order (Pc, O).Status = Delivered, "Time_Rate 10 delivers");
+   end;
+
    New_Line;
    Put_Line ("Passed:" & Passed'Image & "  Failed:" & Failed'Image);
    if Failed > 0 then

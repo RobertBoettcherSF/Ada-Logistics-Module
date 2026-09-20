@@ -4,6 +4,8 @@ pragma Ada_2022;
 
 package body Logistics_Module is
 
+   use type Ada.Calendar.Time;
+
    function Compatible
      (Cargo : Cargo_Class;
       Equip : Body_Kind;
@@ -600,7 +602,8 @@ package body Logistics_Module is
          Amount_FE   => Amount_FE,
          Payment     => Payment,
          Status      => Pending,
-         Mode        => Road);
+         Mode        => Road,
+         others      => <>);
       Success := True;
    end Create_Order;
 
@@ -915,24 +918,30 @@ package body Logistics_Module is
       Order   : Order_Id;
       Success : out Boolean)
    is
-      O     : Order_Record;
-      Bonus : Reputation_Points;
+      O           : Order_Record;
+      Bonus       : Reputation_Points;
+      Was_En_Route : Boolean;
    begin
       Success := False;
       if Natural (Order) > C.O_Count then
          return;
       end if;
       O := C.Orders (Order);
-      if O.Status /= In_Transit then
+      if O.Status not in In_Transit | En_Route then
          return;
       end if;
+      Was_En_Route := O.Status = En_Route;
       C.Orders (Order).Status := Delivered;
       C.Cash_Balance := C.Cash_Balance + O.Payment;
       Bonus := 1;
       if C.Rep <= Reputation_Points'Last - Bonus then
          C.Rep := C.Rep + Bonus;
       end if;
-      if O.Mode in Road | Tunnel and then C.V_Count > 0 then
+      if Was_En_Route then
+         if Natural (O.Assigned_Vehicle) <= C.V_Count then
+            C.Vehicles (O.Assigned_Vehicle).Available := True;
+         end if;
+      elsif O.Mode in Road | Tunnel and then C.V_Count > 0 then
          for I in Vehicle_Id range 1 .. Vehicle_Id (C.V_Count) loop
             if not C.Vehicles (I).Available then
                C.Vehicles (I).Available := True;
@@ -942,5 +951,131 @@ package body Logistics_Module is
       end if;
       Success := True;
    end Complete_Delivery;
+
+   function Speed_Of (Mode : Haul_Mode) return Float is
+   begin
+      case Mode is
+         when Road =>
+            return Speed_Road_m_s;
+         when Tunnel =>
+            return Speed_Tunnel_m_s;
+         when Space_Haul =>
+            return Speed_Space_Haul_m_s;
+      end case;
+   end Speed_Of;
+
+   function Compute_ETA_s
+     (Distance_m : Float; Mode : Haul_Mode) return Float is
+   begin
+      return Distance_m / Speed_Of (Mode);
+   end Compute_ETA_s;
+
+   procedure Set_Time_Rate (C : in out Company; Rate : Float) is
+   begin
+      C.Time_Rate := Rate;
+   end Set_Time_Rate;
+
+   function Time_Rate_Of (C : Company) return Float is
+   begin
+      return C.Time_Rate;
+   end Time_Rate_Of;
+
+   function Haul_To_Dispatch (Mode : Haul_Mode) return Dispatch_Mode is
+   begin
+      case Mode is
+         when Road =>
+            return Road;
+         when Tunnel =>
+            return Tunnel;
+         when Space_Haul =>
+            return Space_Haul;
+      end case;
+   end Haul_To_Dispatch;
+
+   procedure Assign_Vehicle
+     (C          : in out Company;
+      Order      : Order_Id;
+      Vehicle    : Vehicle_Id;
+      Distance_m : Float;
+      Mode       : Haul_Mode := Road;
+      Success    : out Boolean;
+      Now        : Ada.Calendar.Time := Ada.Calendar.Clock)
+   is
+      O : Order_Record;
+      V : Vehicle_Record;
+   begin
+      Success := False;
+      if Natural (Order) > C.O_Count then
+         return;
+      end if;
+      if Natural (Vehicle) > C.V_Count then
+         return;
+      end if;
+      O := C.Orders (Order);
+      if O.Status not in Pending | Accepted then
+         return;
+      end if;
+      V := C.Vehicles (Vehicle);
+      if not V.Available then
+         return;
+      end if;
+
+      if Mode in Road | Tunnel then
+         C.Vehicles (Vehicle).Available := False;
+      end if;
+
+      C.Orders (Order).Status := En_Route;
+      C.Orders (Order).Mode := Haul_To_Dispatch (Mode);
+      C.Orders (Order).Assigned_Vehicle := Vehicle;
+      C.Orders (Order).Distance_m := Distance_m;
+      C.Orders (Order).ETA_s := Compute_ETA_s (Distance_m, Mode);
+      C.Orders (Order).Elapsed_s := 0.0;
+      C.Orders (Order).Assign_Wall_Time := Now;
+      Success := True;
+   end Assign_Vehicle;
+
+   procedure Advance_Elapsed (C : in out Company; Sim_Delta_s : Float) is
+      Ok : Boolean;
+   begin
+      if Sim_Delta_s <= 0.0 or else C.O_Count = 0 then
+         return;
+      end if;
+      for I in Order_Id range 1 .. Order_Id (C.O_Count) loop
+         if C.Orders (I).Status = En_Route then
+            C.Orders (I).Elapsed_s := C.Orders (I).Elapsed_s + Sim_Delta_s;
+            if C.Orders (I).Elapsed_s >= C.Orders (I).ETA_s then
+               Complete_Delivery (C, I, Ok);
+            end if;
+         end if;
+      end loop;
+   end Advance_Elapsed;
+
+   procedure Tick
+     (C   : in out Company;
+      Now : Ada.Calendar.Time := Ada.Calendar.Clock)
+   is
+      Dt_Wall : Duration;
+   begin
+      if not C.Has_Last_Tick then
+         C.Last_Tick_Wall := Now;
+         C.Has_Last_Tick := True;
+         return;
+      end if;
+      Dt_Wall := Now - C.Last_Tick_Wall;
+      C.Last_Tick_Wall := Now;
+      if Dt_Wall > 0.0 then
+         Advance_Elapsed (C, Float (Dt_Wall) * C.Time_Rate);
+      end if;
+   end Tick;
+
+   procedure Tick_Delta
+     (C            : in out Company;
+      Delta_Wall_s : Float)
+   is
+   begin
+      if Delta_Wall_s > 0.0 then
+         Advance_Elapsed (C, Delta_Wall_s * C.Time_Rate);
+      end if;
+   end Tick_Delta;
 
 end Logistics_Module;

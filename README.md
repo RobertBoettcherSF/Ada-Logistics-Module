@@ -86,9 +86,17 @@ use class GVW limits (`N3` check cap 40_000 kg documented in Physical_Data).
 
 ```bash
 make test
+make play   # Text_IO MVP: jobs / assign / tick
 ```
 
-Flags: `-gnatwa -gnat2022 -gnata`. No `main.adb` — `tests.adb` is the entry point.
+Flags: `-gnatwa -gnat2022 -gnata`. Mains: `tests.adb`, `play.adb`.
+
+### MVP play loop
+
+1. List / seed jobs  2. Assign vehicle → `En_Route`, `ETA_s = Distance_m / Speed`
+3. Tick: wall Δt × `Time_Rate` → `Elapsed_s`; deliver when `Elapsed_s >= ETA_s`
+4. Menu: `[j]obs [a]ssign [t]/Enter tick [r]ate [q]uit` (auto-tick each line)
+
 
 ## License
 

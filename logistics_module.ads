@@ -7,6 +7,8 @@
 
 pragma Ada_2022;
 
+with Ada.Calendar;
+
 package Logistics_Module is
 
    pragma Elaborate_Body;
@@ -303,7 +305,8 @@ package Logistics_Module is
    end record;
 
    type Staff_Role is (Dispatcher, Driver, Mechanic, Clerk, Manager);
-   type Order_Status is (Pending, Accepted, In_Transit, Delivered, Cancelled);
+   type Order_Status is
+     (Pending, Accepted, In_Transit, En_Route, Delivered, Cancelled);
    type Offer_Status is (Open, Accepted_Offer, Declined, Expired);
 
    type Vehicle_Record is record
@@ -319,15 +322,21 @@ package Logistics_Module is
    end record;
 
    type Order_Record is record
-      Origin      : City_Id := 1;
-      Destination : City_Id := 1;
-      Cargo       : Cargo_Class := Flatbed_Cargo;
-      Hazard      : Hazard_Class := None;
-      Placard     : Placard_Code := Empty_Placard;
-      Amount_FE   : Freight_Units := 0;
-      Payment     : Money := 0.0;
-      Status      : Order_Status := Pending;
-      Mode        : Dispatch_Mode := Road;
+      Origin            : City_Id := 1;
+      Destination       : City_Id := 1;
+      Cargo             : Cargo_Class := Flatbed_Cargo;
+      Hazard            : Hazard_Class := None;
+      Placard           : Placard_Code := Empty_Placard;
+      Amount_FE         : Freight_Units := 0;
+      Payment           : Money := 0.0;
+      Status            : Order_Status := Pending;
+      Mode              : Dispatch_Mode := Road;
+      Assigned_Vehicle  : Vehicle_Id := 1;
+      Distance_m        : Float := 0.0;
+      ETA_s             : Float := 0.0;
+      Elapsed_s         : Float := 0.0;
+      Assign_Wall_Time  : Ada.Calendar.Time :=
+        Ada.Calendar.Time_Of (1901, 1, 1);
    end record;
 
    type Staff_Record is record
@@ -487,6 +496,57 @@ package Logistics_Module is
       Order   : Order_Id;
       Success : out Boolean);
 
+
+   ------------------------------------------------------------------
+   -- MVP play: haul speeds, ETA, assign → En_Route, tick → Delivered
+   ------------------------------------------------------------------
+   Speed_Road_m_s       : constant Float := 22.0;
+   Speed_Tunnel_m_s     : constant Float := 30.0;
+   Speed_Space_Haul_m_s : constant Float := 3_000.0;
+
+   function Speed_Of (Mode : Haul_Mode) return Float
+   with
+     Post =>
+       (case Mode is
+          when Road       => Speed_Of'Result = Speed_Road_m_s,
+          when Tunnel     => Speed_Of'Result = Speed_Tunnel_m_s,
+          when Space_Haul => Speed_Of'Result = Speed_Space_Haul_m_s);
+
+   -- ETA_s = Distance_m / Speed_m_s
+   function Compute_ETA_s
+     (Distance_m : Float; Mode : Haul_Mode) return Float
+   with
+     Pre  => Distance_m >= 0.0,
+     Post => Compute_ETA_s'Result = Distance_m / Speed_Of (Mode);
+
+   procedure Set_Time_Rate (C : in out Company; Rate : Float)
+   with
+     Pre => Rate > 0.0;
+
+   function Time_Rate_Of (C : Company) return Float;
+
+   -- Pending/Accepted → En_Route; records Assign_Wall_Time + ETA_s
+   procedure Assign_Vehicle
+     (C          : in out Company;
+      Order      : Order_Id;
+      Vehicle    : Vehicle_Id;
+      Distance_m : Float;
+      Mode       : Haul_Mode := Road;
+      Success    : out Boolean;
+      Now        : Ada.Calendar.Time := Ada.Calendar.Clock)
+   with
+     Pre => Distance_m >= 0.0;
+
+   -- Wall Δt * Time_Rate → Elapsed_s; deliver when Elapsed_s >= ETA_s
+   procedure Tick
+     (C   : in out Company;
+      Now : Ada.Calendar.Time := Ada.Calendar.Clock);
+
+   -- Inject wall seconds (tests / demos; no long sleep)
+   procedure Tick_Delta
+     (C            : in out Company;
+      Delta_Wall_s : Float);
+
    Company_Error : exception;
 
 private
@@ -511,22 +571,26 @@ private
      of Natural;
 
    type Company is record
-      Cash_Balance  : Money := 0.0;
-      Rep           : Reputation_Points := 0;
-      Vehicles      : Vehicle_Array;
-      V_Count       : Natural := 0;
-      Orders        : Order_Array;
-      O_Count       : Natural := 0;
-      Staff_Members : Staff_Array;
-      S_Count       : Natural := 0;
-      Offers        : Offer_Array;
-      Off_Count     : Natural := 0;
-      Cities        : City_Array;
-      City_Names_A  : City_Names := [others => [others => ' ']];
-      City_Lens     : City_Name_Lens := [others => 0];
-      L_Count       : Natural := 0;
-      Rail_Slots    : Rail_Slot_Array;
-      R_Count       : Natural := 0;
+      Cash_Balance   : Money := 0.0;
+      Rep            : Reputation_Points := 0;
+      Vehicles       : Vehicle_Array;
+      V_Count        : Natural := 0;
+      Orders         : Order_Array;
+      O_Count        : Natural := 0;
+      Staff_Members  : Staff_Array;
+      S_Count        : Natural := 0;
+      Offers         : Offer_Array;
+      Off_Count      : Natural := 0;
+      Cities         : City_Array;
+      City_Names_A   : City_Names := [others => [others => ' ']];
+      City_Lens      : City_Name_Lens := [others => 0];
+      L_Count        : Natural := 0;
+      Rail_Slots     : Rail_Slot_Array;
+      R_Count        : Natural := 0;
+      Time_Rate      : Float := 1.0;
+      Last_Tick_Wall : Ada.Calendar.Time :=
+        Ada.Calendar.Time_Of (1901, 1, 1);
+      Has_Last_Tick  : Boolean := False;
    end record;
 
 end Logistics_Module;

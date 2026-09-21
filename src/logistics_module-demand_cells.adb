@@ -413,6 +413,15 @@ package body Logistics_Module.Demand_Cells is
       return Distance_m / Cruise_Speed_m_s (S);
    end Transit_Duration_s;
 
+   function Transit_Duration_s
+     (A, B : World_Body;
+      S    : Fleet_Species;
+      T_s  : Float := 0.0) return Float
+   is
+   begin
+      return Transit_Duration_s (Logistics_Module.Distance_m (A, B, T_s), S);
+   end Transit_Duration_s;
+
    function Transit_Duration_s (Cell : Demand_Cell) return Float is
    begin
       return Transit_Duration_s (Cell.Distance_m, Cell.Preferred);

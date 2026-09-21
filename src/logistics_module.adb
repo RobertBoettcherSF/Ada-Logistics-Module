@@ -3,6 +3,7 @@
 pragma Ada_2022;
 
 with Ada.Numerics.Elementary_Functions;
+with Logistics_Module.Ephemeris;
 
 package body Logistics_Module is
 
@@ -520,19 +521,38 @@ package body Logistics_Module is
 
    function Position_Of (World : World_Body) return Position_m is
    begin
-      case World is
-         when Terra_0 =>
-            return Terra_Origin;
-         when Moon_Polar =>
-            return (X => Earth_Moon_Distance_m, Y => 0.0, Z => 0.0);
-         when Venus_Cloud_Port =>
-            return (X => 0.72 * Hub_AU_m, Y => 0.0, Z => 0.0);
-         when Mars =>
-            return (X => Mars_Offset_m, Y => 0.0, Z => 0.0);
-         when Titan =>
-            return (X => 9.5 * Hub_AU_m, Y => 0.0, Z => 0.0);
-      end case;
+      return Logistics_Module.Ephemeris.Sample_At (World, 0.0);
    end Position_Of;
+
+   function Position_Of (World : World_Body; T_s : Float) return Position_m is
+   begin
+      return Logistics_Module.Ephemeris.Sample_At (World, T_s);
+   end Position_Of;
+
+   function Sample_At (World : World_Body; T_s : Float) return Position_m is
+   begin
+      return Logistics_Module.Ephemeris.Sample_At (World, T_s);
+   end Sample_At;
+
+   function Load_Ephemeris_Table (Path : String) return Boolean is
+   begin
+      return Logistics_Module.Ephemeris.Load_Ephemeris_Table (Path);
+   end Load_Ephemeris_Table;
+
+   procedure Load_Ephemeris_Table (Path : String; Success : out Boolean) is
+   begin
+      Logistics_Module.Ephemeris.Load_Ephemeris_Table (Path, Success);
+   end Load_Ephemeris_Table;
+
+   procedure Clear_Ephemeris_Table is
+   begin
+      Logistics_Module.Ephemeris.Clear_Ephemeris_Table;
+   end Clear_Ephemeris_Table;
+
+   function Table_Loaded return Boolean is
+   begin
+      return Logistics_Module.Ephemeris.Table_Loaded;
+   end Table_Loaded;
 
    function Lerp (A, B : Position_m; T : Float) return Position_m is
       U : constant Float := Float'Max (0.0, Float'Min (1.0, T));
@@ -554,7 +574,13 @@ package body Logistics_Module is
 
    function Distance_m (A, B : World_Body) return Float is
    begin
-      return Distance_m (Position_Of (A), Position_Of (B));
+      return Distance_m (A, B, 0.0);
+   end Distance_m;
+
+   function Distance_m
+     (A, B : World_Body; T_s : Float) return Float is
+   begin
+      return Logistics_Module.Ephemeris.Distance_m (A, B, T_s);
    end Distance_m;
 
    function Create_Company
@@ -1587,6 +1613,14 @@ package body Logistics_Module is
      (Distance_m : Float; Mode : Haul_Mode) return Float is
    begin
       return Distance_m / Speed_Of (Mode);
+   end Compute_ETA_s;
+
+   function Compute_ETA_s
+     (A, B : World_Body;
+      Mode : Haul_Mode;
+      T_s  : Float := 0.0) return Float is
+   begin
+      return Compute_ETA_s (Distance_m (A, B, T_s), Mode);
    end Compute_ETA_s;
 
    procedure Set_Time_Rate (C : in out Company; Rate : Float) is

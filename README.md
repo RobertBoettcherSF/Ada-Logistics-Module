@@ -221,3 +221,48 @@ the market's 12-barge policy floor and pool cap are respected.
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+## MIT-safe ephemeris support
+
+`Logistics_Module.Ephemeris` provides a small, in-tree circular heliocentric
+Kepler stub. It has no Swiss Ephemeris dependency and vendors no ephemeris
+code or data. `Position_Of (World, T_s)` and `Distance_m (A, B, T_s)` use the
+loaded exchange table when a body is present, otherwise they use the stub.
+The original `Position_Of (World)` and `Distance_m (A, B)` calls remain the
+t=0 compatibility forms. `Compute_ETA_s (A, B, Mode, T_s)` and
+`Demand_Cells.Transit_Duration_s (A, B, Ship_Class, T_s)` resolve distance at
+departure; existing distance-based APIs are unchanged.
+
+### Exchange table v1
+
+Tables are UTF-8/plain CSV (the loader ignores `#` comments):
+
+```text
+# Ada Logistics Ephemeris Table v1
+# columns: body,t_s,x_m,y_m,z_m
+# body: Terra_0|Moon_Polar|Venus_Cloud_Port|Mars|Titan
+Terra_0,0,0,0,0
+Titan,0,0,0,0
+```
+
+`t_s` is seconds from the table epoch and coordinates are metres, relative to
+`Terra_0`. Samples for each body are linearly interpolated and clamped at the
+ends. A body absent from a loaded table falls back to the in-tree Kepler
+stub. `Load_Ephemeris_Table` replaces the previous table only after a complete
+successful parse.
+
+`make eph` builds a small Ada generator, writes
+`eph/batch_terra_mars_titan.csv`, reloads it, checks the t=0 Terra--Titan
+distance is about 9.5 AU, checks a 3000 m/s transit is about 15 years, and
+checks that the Mars angle moves. The batch file is intentionally a portable
+interchange example, not a precision ephemeris.
+
+### Later SwissEph/JPL/swetest conversion
+
+Do not copy Swiss Ephemeris (or its AGPL data/code) into this MIT repository.
+A later import can be done as an external/manual conversion: run the chosen
+external tool under its own licence, map its body name to the five allowed
+`body` tokens, convert its epoch/time to seconds `t_s`, convert AU or km to
+metres, and emit `body,t_s,x_m,y_m,z_m` rows. Review the external licence and
+redistribution terms separately; only the resulting neutral CSV belongs in an
+application deployment.

@@ -291,6 +291,15 @@ package Logistics_Module.Demand_Cells is
      Pre => Distance_m >= 0.0
        and then Cruise_Speed_m_s (S) < Float (c_m_s);
 
+   --  World-route helper: resolve the distance at departure T_s, then use
+   --  the same fleet transit calculation as the legacy distance overload.
+   function Transit_Duration_s
+     (A, B : World_Body;
+      S    : Fleet_Species;
+      T_s  : Float := 0.0) return Float
+   with
+     Pre => Cruise_Speed_m_s (S) < Float (c_m_s);
+
    function Transit_Duration_s (Cell : Demand_Cell) return Float
    with
      Pre => Cell.Distance_m >= 0.0;

@@ -285,3 +285,40 @@ must pass `Mode_Allows_Hazard`, and this model is not ADR/IATA compliance.
 Product kinds (`Cargo_Kind`) still use `Allows_Body` then this matrix via
 `To_Cargo_Class` (`Food_Cold`/`Pharma_Cold` → Reefer, etc.).
 
+
+## MIT-safe ephemeris exchange (v1)
+
+The module includes an educational circular heliocentric Kepler fallback in
+`Logistics_Module.Ephemeris`. It is deliberately not Swiss Ephemeris/JPL
+precision data. No Swiss Ephemeris source, binary, or data file is vendored;
+the repository remains MIT-licensed.
+
+The neutral exchange format is plain CSV:
+
+```text
+# Ada Logistics Ephemeris Table v1
+# columns: body,t_s,x_m,y_m,z_m
+# body: Terra_0|Moon_Polar|Venus_Cloud_Port|Mars|Titan
+Terra_0,0,0,0,0
+Titan,0,<x>,<y>,<z>
+```
+
+`T_s` is seconds from the table epoch. `x_m,y_m,z_m` are metres relative to
+Terra_0. Comment lines begin with `#`; data rows have exactly five comma
+separated fields. Each body may have multiple time samples. The loader
+linearly interpolates between that body's rows and clamps before/after its
+range. Bodies absent from a loaded file use Kepler; a failed load does not
+replace the current table.
+
+Later SwissEph, JPL, or `swetest` output can be converted without linking
+SwissEph: manually or with a separate converter, map the source body name to
+`Terra_0`, `Moon_Polar`, `Venus_Cloud_Port`, `Mars`, or `Titan`, convert the
+source epoch to seconds from the selected table epoch, convert AU/km to metres,
+and write the five-column CSV above. Keep the external converter and source
+data outside this repository and verify AGPL/proprietary redistribution terms
+before shipping any generated data.
+
+`make eph` generates and round-trips the checked-in example batch
+`eph/batch_terra_mars_titan.csv`; it is a test fixture for the format, not a
+claim of astronomical precision. At t=0 its Terra--Titan proxy is about 9.5 AU
+and a 3000 m/s one-way estimate is about 15 years.

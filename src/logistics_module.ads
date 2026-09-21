@@ -11,8 +11,6 @@ with Ada.Calendar;
 
 package Logistics_Module is
 
-   pragma Elaborate_Body;
-
    type Money is delta 0.01 range -1_000_000_000.00 .. 1_000_000_000.00;
    type Reputation_Points is range -1000 .. 1000;
 
@@ -261,11 +259,28 @@ package Logistics_Module is
    Mars_Offset_m           : constant Float := 2.25e11;  -- ~1.5 AU lean
 
    function Position_Of (World : World_Body) return Position_m;
+
+   --  Time-aware ephemeris overload.  T_s is seconds from the exchange
+   --  table epoch; the no-time overload remains the t=0 compatibility API.
+   function Position_Of (World : World_Body; T_s : Float) return Position_m;
+
+   --  Convenience facade for the child ephemeris package.
+   function Sample_At (World : World_Body; T_s : Float) return Position_m;
+   function Load_Ephemeris_Table (Path : String) return Boolean;
+   procedure Load_Ephemeris_Table (Path : String; Success : out Boolean);
+   procedure Clear_Ephemeris_Table;
+   function Table_Loaded return Boolean;
+
    function Lerp (A, B : Position_m; T : Float) return Position_m;
    function Distance_m (A, B : Position_m) return Float
    with
      Post => Distance_m'Result >= 0.0;
    function Distance_m (A, B : World_Body) return Float
+   with
+     Post => Distance_m'Result >= 0.0;
+
+   function Distance_m
+     (A, B : World_Body; T_s : Float) return Float
    with
      Post => Distance_m'Result >= 0.0;
 
@@ -859,6 +874,14 @@ package Logistics_Module is
    with
      Pre  => Distance_m >= 0.0,
      Post => Compute_ETA_s'Result = Distance_m / Speed_Of (Mode);
+
+   --  Distance-at-departure convenience for world-to-world routes.
+   function Compute_ETA_s
+     (A, B : World_Body;
+      Mode : Haul_Mode;
+      T_s  : Float := 0.0) return Float
+   with
+     Post => Compute_ETA_s'Result = Distance_m (A, B, T_s) / Speed_Of (Mode);
 
    procedure Set_Time_Rate (C : in out Company; Rate : Float)
    with

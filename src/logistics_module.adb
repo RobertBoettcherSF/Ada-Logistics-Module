@@ -515,6 +515,15 @@ package body Logistics_Module is
       end case;
    end Position_Of;
 
+   function Lerp (A, B : Position_m; T : Float) return Position_m is
+      U : constant Float := Float'Max (0.0, Float'Min (1.0, T));
+   begin
+      return
+        (X => A.X + (B.X - A.X) * U,
+         Y => A.Y + (B.Y - A.Y) * U,
+         Z => A.Z + (B.Z - A.Z) * U);
+   end Lerp;
+
    function Distance_m (A, B : Position_m) return Float is
       DX : constant Float := A.X - B.X;
       DY : constant Float := A.Y - B.Y;
@@ -853,7 +862,17 @@ package body Logistics_Module is
          Available            => True,
          Needs_Maintain       => False,
          Vehicle_ADR_Approved => ADR_Approved,
-         Phys                 => P);
+         Phys                 => P,
+         Position             => Terra_Origin,
+         Phase                => Docked,
+         Dock_World           => Terra_0,
+         Dwell_Remaining_s    => 0.0,
+         Route_From           => Terra_Origin,
+         Route_To             => Terra_Origin,
+         Trip_Elapsed_s       => 0.0,
+         Trip_ETA_s           => 0.0,
+         Bound_Order          => 1,
+         Has_Bound            => False);
       Success := True;
    end Add_Vehicle;
 
@@ -864,6 +883,44 @@ package body Logistics_Module is
       end if;
       return C.Vehicles (Id);
    end Get_Vehicle;
+
+   function Vehicle_Position (C : Company; Id : Vehicle_Id) return Position_m is
+   begin
+      return Get_Vehicle (C, Id).Position;
+   end Vehicle_Position;
+
+   function Vehicle_Phase_Of (C : Company; Id : Vehicle_Id) return Vehicle_Phase is
+   begin
+      return Get_Vehicle (C, Id).Phase;
+   end Vehicle_Phase_Of;
+
+   procedure Set_Default_Turnaround (C : in out Company; Seconds : Float) is
+   begin
+      C.Turnaround_s := Seconds;
+   end Set_Default_Turnaround;
+
+   procedure Force_Dock
+     (C        : in out Company;
+      Id       : Vehicle_Id;
+      World    : World_Body;
+      Position : Position_m;
+      Dwell_s  : Float := 0.0)
+   is
+   begin
+      if Natural (Id) > C.V_Count then
+         return;
+      end if;
+      C.Vehicles (Id).Position := Position;
+      C.Vehicles (Id).Route_From := Position;
+      C.Vehicles (Id).Route_To := Position;
+      C.Vehicles (Id).Phase := Docked;
+      C.Vehicles (Id).Dock_World := World;
+      C.Vehicles (Id).Dwell_Remaining_s := Dwell_s;
+      C.Vehicles (Id).Trip_Elapsed_s := 0.0;
+      C.Vehicles (Id).Trip_ETA_s := 0.0;
+      C.Vehicles (Id).Available := Dwell_s <= 0.0;
+      C.Vehicles (Id).Has_Bound := False;
+   end Force_Dock;
 
    procedure Attach_Body
      (C           : in out Company;
@@ -1416,7 +1473,17 @@ package body Logistics_Module is
       end if;
       if Was_En_Route then
          if Natural (O.Assigned_Vehicle) <= C.V_Count then
-            C.Vehicles (O.Assigned_Vehicle).Available := True;
+            --  An assigned vehicle remains unavailable while it is underway
+            --  or during its configured turnaround dwell.
+            if C.Vehicles (O.Assigned_Vehicle).Has_Bound
+              and then C.Vehicles (O.Assigned_Vehicle).Bound_Order = Order
+            then
+               C.Vehicles (O.Assigned_Vehicle).Available :=
+                 C.Vehicles (O.Assigned_Vehicle).Phase = Docked
+                   and then C.Vehicles (O.Assigned_Vehicle).Dwell_Remaining_s <= 0.0;
+            else
+               C.Vehicles (O.Assigned_Vehicle).Available := True;
+            end if;
          end if;
       elsif O.Mode in Road | Tunnel and then C.V_Count > 0 then
          for I in Vehicle_Id range 1 .. Vehicle_Id (C.V_Count) loop
@@ -1518,9 +1585,8 @@ package body Logistics_Module is
          end if;
       end if;
 
-      if Mode in Road | Tunnel then
-         C.Vehicles (Vehicle).Available := False;
-      end if;
+      --  Assignment owns the vehicle clock for every haul mode.
+      C.Vehicles (Vehicle).Available := False;
 
       C.Orders (Order).Status := En_Route;
       C.Orders (Order).Mode := Haul_To_Dispatch (Mode);
@@ -1529,8 +1595,80 @@ package body Logistics_Module is
       C.Orders (Order).ETA_s := Compute_ETA_s (Distance_m, Mode);
       C.Orders (Order).Elapsed_s := 0.0;
       C.Orders (Order).Assign_Wall_Time := Now;
+
+      C.Vehicles (Vehicle).Position := C.Cities (O.Origin).Position;
+      C.Vehicles (Vehicle).Phase := Underway;
+      C.Vehicles (Vehicle).Dock_World := Terra_0;
+      C.Vehicles (Vehicle).Dwell_Remaining_s := 0.0;
+      C.Vehicles (Vehicle).Route_From := C.Cities (O.Origin).Position;
+      C.Vehicles (Vehicle).Route_To := C.Cities (O.Destination).Position;
+      C.Vehicles (Vehicle).Trip_Elapsed_s := 0.0;
+      C.Vehicles (Vehicle).Trip_ETA_s := C.Orders (Order).ETA_s;
+      C.Vehicles (Vehicle).Bound_Order := Order;
+      C.Vehicles (Vehicle).Has_Bound := True;
       Success := True;
    end Assign_Vehicle;
+
+   procedure Advance_Vehicles (C : in out Company; Sim_Delta_s : Float) is
+      Remaining : Float;
+      To_Dock   : Float;
+   begin
+      if Sim_Delta_s <= 0.0 or else C.V_Count = 0 then
+         return;
+      end if;
+
+      for I in Vehicle_Id range 1 .. Vehicle_Id (C.V_Count) loop
+         Remaining := Sim_Delta_s;
+
+         if C.Vehicles (I).Phase = Underway then
+            if C.Vehicles (I).Trip_ETA_s > C.Vehicles (I).Trip_Elapsed_s then
+               To_Dock := C.Vehicles (I).Trip_ETA_s
+                 - C.Vehicles (I).Trip_Elapsed_s;
+               To_Dock := Float'Min (Remaining, To_Dock);
+               C.Vehicles (I).Trip_Elapsed_s :=
+                 C.Vehicles (I).Trip_Elapsed_s + To_Dock;
+               Remaining := Remaining - To_Dock;
+            end if;
+
+            C.Vehicles (I).Position :=
+              Lerp (C.Vehicles (I).Route_From,
+                    C.Vehicles (I).Route_To,
+                    (if C.Vehicles (I).Trip_ETA_s > 0.0
+                     then C.Vehicles (I).Trip_Elapsed_s
+                       / C.Vehicles (I).Trip_ETA_s
+                     else 1.0));
+
+            if C.Vehicles (I).Trip_Elapsed_s >= C.Vehicles (I).Trip_ETA_s
+              or else C.Vehicles (I).Trip_ETA_s <= 0.0
+            then
+               C.Vehicles (I).Position := C.Vehicles (I).Route_To;
+               C.Vehicles (I).Phase := Docked;
+               C.Vehicles (I).Dock_World := Terra_0;
+               C.Vehicles (I).Dwell_Remaining_s := C.Turnaround_s;
+               C.Vehicles (I).Available := C.Turnaround_s <= 0.0;
+               if C.Turnaround_s <= 0.0 then
+                  C.Vehicles (I).Dwell_Remaining_s := 0.0;
+                  C.Vehicles (I).Has_Bound := False;
+               end if;
+            end if;
+         end if;
+
+         if C.Vehicles (I).Phase = Docked
+           and then C.Vehicles (I).Dwell_Remaining_s > 0.0
+         then
+            if Remaining >= C.Vehicles (I).Dwell_Remaining_s then
+               Remaining := Remaining - C.Vehicles (I).Dwell_Remaining_s;
+               C.Vehicles (I).Dwell_Remaining_s := 0.0;
+               C.Vehicles (I).Available := True;
+               C.Vehicles (I).Has_Bound := False;
+            else
+               C.Vehicles (I).Dwell_Remaining_s :=
+                 C.Vehicles (I).Dwell_Remaining_s - Remaining;
+               C.Vehicles (I).Available := False;
+            end if;
+         end if;
+      end loop;
+   end Advance_Vehicles;
 
    procedure Advance_Elapsed (C : in out Company; Sim_Delta_s : Float) is
       Ok : Boolean;
@@ -1539,6 +1677,7 @@ package body Logistics_Module is
          return;
       end if;
       Advance_Pad_Repairs (C, Sim_Delta_s);
+      Advance_Vehicles (C, Sim_Delta_s);
       if C.O_Count = 0 then
          return;
       end if;

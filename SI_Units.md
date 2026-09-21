@@ -32,3 +32,12 @@ Integer/cm APIs already in a module (e.g. `Speed_Cm_S`) may stay; document the u
 | `Score_kg_s` | `Payload_Net_kg / Transit_Duration_s` (one-way) |
 
 Copies of this file in sibling repos should stay short and aligned; Logistics is canonical.
+
+
+## Vehicle spatiotemporal state
+
+Vehicles expose `Position_m` and `Route_From`/`Route_To` in SI metres, with
+`Phase` (`Docked`, `Underway`, or `Arriving`) and simulated seconds in
+`Dwell_Remaining_s`.  `Default_Turnaround_s` controls the post-arrival dock
+dwell; it defaults to zero for legacy compatibility (tests can set
+`Two_Day_Turnaround_s`).

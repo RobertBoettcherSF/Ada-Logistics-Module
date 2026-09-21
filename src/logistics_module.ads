@@ -261,6 +261,7 @@ package Logistics_Module is
    Mars_Offset_m           : constant Float := 2.25e11;  -- ~1.5 AU lean
 
    function Position_Of (World : World_Body) return Position_m;
+   function Lerp (A, B : Position_m; T : Float) return Position_m;
    function Distance_m (A, B : Position_m) return Float
    with
      Post => Distance_m'Result >= 0.0;
@@ -513,6 +514,12 @@ package Logistics_Module is
       Rejected_ATC);
    type Offer_Status is (Open, Accepted_Offer, Declined, Expired);
 
+   type Vehicle_Phase is (Docked, Underway, Arriving);
+
+   --  A zero default preserves the legacy immediate vehicle reuse behavior.
+   Default_Turnaround_s : constant Float := 0.0;
+   Two_Day_Turnaround_s : constant Float := 2.0 * 86_400.0;
+
    type Vehicle_Record is record
       Kind                 : Vehicle_Kind := Light_Van;
       Attached_Body        : Body_Kind := Flatbed;
@@ -523,6 +530,16 @@ package Logistics_Module is
       Needs_Maintain       : Boolean := False;
       Vehicle_ADR_Approved : Boolean := False;
       Phys                 : Vehicle_Physical := Van_N1;
+      Position             : Position_m := Terra_Origin;
+      Phase                : Vehicle_Phase := Docked;
+      Dock_World           : World_Body := Terra_0;
+      Dwell_Remaining_s    : Float := 0.0;
+      Route_From           : Position_m := Terra_Origin;
+      Route_To             : Position_m := Terra_Origin;
+      Trip_Elapsed_s       : Float := 0.0;
+      Trip_ETA_s           : Float := 0.0;
+      Bound_Order          : Order_Id := 1;
+      Has_Bound            : Boolean := False;
    end record;
 
    type Order_Record is record
@@ -670,6 +687,22 @@ package Logistics_Module is
    -- When Phys.GVW > 0, requires Masses_Valid; class limits enforced.
 
    function Get_Vehicle (C : Company; Id : Vehicle_Id) return Vehicle_Record;
+
+   function Vehicle_Position (C : Company; Id : Vehicle_Id) return Position_m;
+   function Vehicle_Phase_Of (C : Company; Id : Vehicle_Id) return Vehicle_Phase;
+
+   procedure Set_Default_Turnaround (C : in out Company; Seconds : Float)
+   with
+     Pre => Seconds >= 0.0;
+
+   procedure Force_Dock
+     (C        : in out Company;
+      Id       : Vehicle_Id;
+      World    : World_Body;
+      Position : Position_m;
+      Dwell_s  : Float := 0.0)
+   with
+     Pre => Dwell_s >= 0.0;
 
    procedure Attach_Body
      (C           : in out Company;
@@ -872,6 +905,7 @@ private
       Rail_Slots     : Rail_Slot_Array;
       R_Count        : Natural := 0;
       Time_Rate      : Float := 1.0;
+      Turnaround_s   : Float := Default_Turnaround_s;
       Last_Tick_Wall : Ada.Calendar.Time :=
         Ada.Calendar.Time_Of (1901, 1, 1);
       Has_Last_Tick  : Boolean := False;

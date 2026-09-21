@@ -692,6 +692,56 @@ begin
       Check (Get_Order (Pc, O).Status = Delivered, "Time_Rate 10 delivers");
    end;
 
+   ------------------------------------------------------------------
+   -- Vehicle spatiotemporal state and turnaround dwell
+   ------------------------------------------------------------------
+   declare
+      Sv       : Company;
+      Va, Vb   : City_Id;
+      V        : Vehicle_Id;
+      Ov       : Order_Id;
+      Pv       : Position_m;
+      Success  : Boolean;
+   begin
+      Sv := Create_Company (10_000.00);
+      Add_City
+        (Sv, "Terra", False, False, Position => Terra_Origin, Id => Va);
+      Add_City
+        (Sv, "Destination", False, False,
+         Position => (X => 2_000.0, Y => 0.0, Z => 0.0), Id => Vb);
+      Add_Vehicle (Sv, Light_Van, Flatbed, True, 4, 1_000.00, V, Success);
+      Check (Success and then Vehicle_Phase_Of (Sv, V) = Docked
+               and then Vehicle_Position (Sv, V) = Terra_Origin,
+             "freighter starts docked at Terra origin");
+      Check (Lerp ((0.0, 0.0, 0.0), (10.0, 20.0, 30.0), 0.5)
+               = (5.0, 10.0, 15.0),
+             "Lerp midpoint");
+
+      Set_Default_Turnaround (Sv, Two_Day_Turnaround_s);
+      Create_Order (Sv, Va, Vb, Flatbed_Cargo, 1, 500.00, Ov, Success);
+      Assign_Vehicle (Sv, Ov, V, 2_200.0, Road, Success);
+      Check (Success and then Vehicle_Phase_Of (Sv, V) = Underway
+               and then not Get_Vehicle (Sv, V).Available,
+             "assignment starts underway and unavailable");
+      Tick_Delta (Sv, 50.0);
+      Pv := Vehicle_Position (Sv, V);
+      Check (abs (Pv.X - 1_000.0) < 0.01 and then Pv.Y = 0.0
+               and then Vehicle_Phase_Of (Sv, V) = Underway,
+             "vehicle position interpolates at midpoint");
+      Tick_Delta (Sv, 50.0);
+      Check (Vehicle_Phase_Of (Sv, V) = Docked
+               and then Vehicle_Position (Sv, V)
+                 = (X => 2_000.0, Y => 0.0, Z => 0.0)
+               and then not Get_Vehicle (Sv, V).Available
+               and then abs (Get_Vehicle (Sv, V).Dwell_Remaining_s
+                              - Two_Day_Turnaround_s) < 0.01,
+             "arrival starts configured turnaround dwell");
+      Tick_Delta (Sv, Two_Day_Turnaround_s);
+      Check (Get_Vehicle (Sv, V).Available
+               and then Get_Vehicle (Sv, V).Dwell_Remaining_s = 0.0,
+             "vehicle available after turnaround dwell");
+   end;
+
 
    ------------------------------------------------------------------
    -- Demand_Cells: SI constants, fitness fleet, Life_Tick

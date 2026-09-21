@@ -172,3 +172,26 @@ See also [SI_Units.md](SI_Units.md) (shared Ada naming pattern).
 Score_Ref from Barge_Inner at ref distance. Cruise still < c. Extreme speed can lower Score vs mid due to fuel.
 
 `Life_Tick` (evo) and `Run_Tournament_Ticks` both write `Fuel_Mass_kg`, `Payload_Net_kg`, `Score_kg_s`, `Reward_Coin` into `sim_run.csv` for SI-audit.
+
+## Cargo compatibility (IRL-inspired, educational)
+
+`Compatible (Cargo_Class, Body_Kind, Dispatch_Mode)` — not legal/ADR text.
+
+**Road / Tunnel:** dedicated road body required (`Equip` must match).  
+**Rail / Sea / Air / Space_Haul:** `True` means the *mode* can carry that class
+with specialized stock; road `Equip` is ignored.  
+**Space_Haul:** Container only (game intermodal stub).
+
+| Cargo_Class | Road body | Tunnel | Rail | Sea | Air | Space_Haul | IRL note |
+|-------------|-----------|--------|------|-----|-----|------------|----------|
+| Silo | Silo | = Road | Yes (hopper) | Yes (bulk) | No | No | Dry bulk |
+| Tank | Tank | = Road | Yes (tank car) | Yes (tanker) | No | No | Liquids/gases; air/space DG-sensitive |
+| Lowboy | Lowboy | = Road | Yes (heavy flat) | Yes (RoRo / HL) | No | No | Oversize / plant |
+| Reefer | Reefer | = Road | Yes | Yes (reefer box) | Yes (cool cargo) | No | Cold chain |
+| Flatbed | Flatbed | = Road | Yes (flatcar) | Yes (breakbulk) | Yes (pallet/ULD) | No | Open deck |
+| Container | Container | = Road | Yes | Yes | Yes (ULD) | **Yes** | Intermodal |
+| Dry_Box | Dry_Box | = Road | Yes (boxcar) | Yes | Yes | No | Enclosed dry van |
+
+Product kinds (`Cargo_Kind`) still use `Allows_Body` then this matrix via
+`To_Cargo_Class` (`Food_Cold`/`Pharma_Cold` → Reefer, etc.).
+

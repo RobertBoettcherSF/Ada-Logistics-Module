@@ -13,9 +13,15 @@ package body Logistics_Module is
       Equip : Body_Kind;
       Mode  : Dispatch_Mode) return Boolean
    is
+      --  IRL-inspired matrix (educational, not legal/regulatory text).
+      --  Body_Kind is road equipment. On Rail/Sea/Air/Space_Haul a True
+      --  result means the *mode* can carry that cargo class with its own
+      --  specialized stock (hopper, tank car, flatcar, reefer box, ISO, …),
+      --  so Equip is not required to match the road body.
    begin
       case Cargo is
          when Silo_Cargo =>
+            --  Dry bulk: road silo/pneumatic; rail hopper; sea bulk; not air/space.
             case Mode is
                when Road | Tunnel =>
                   return Equip = Silo;
@@ -25,6 +31,7 @@ package body Logistics_Module is
                   return False;
             end case;
          when Tank_Cargo =>
+            --  Liquids/gases: road tank; rail tank car; sea tanker; not air/space (DG).
             case Mode is
                when Road | Tunnel =>
                   return Equip = Tank;
@@ -34,9 +41,8 @@ package body Logistics_Module is
                   return False;
             end case;
          when Lowboy_Cargo =>
-            --  Oversize / heavy plant: road needs a lowboy trailer;
-            --  rail/sea accept the cargo regardless of road body;
-            --  air / space haul refuse it.
+            --  Oversize / heavy plant: road lowboy/RGN; rail heavy flat/Schnabel;
+            --  sea RoRo / heavy-lift; not typical air or space.
             case Mode is
                when Road | Tunnel =>
                   return Equip = Lowboy;
@@ -46,17 +52,29 @@ package body Logistics_Module is
                   return False;
             end case;
          when Reefer_Cargo =>
-            return Mode in Road | Tunnel and then Equip = Reefer;
+            --  Cold chain: road reefer; rail reefer; sea reefer containers;
+            --  air cool-cargo; not space.
+            case Mode is
+               when Road | Tunnel =>
+                  return Equip = Reefer;
+               when Rail | Sea | Air =>
+                  return True;
+               when Space_Haul =>
+                  return False;
+            end case;
          when Flatbed_Cargo =>
+            --  Open deck / breakbulk: road flatbed; rail flatcar; sea breakbulk/RoRo;
+            --  air pallet/ULD; not space.
             case Mode is
                when Road | Tunnel =>
                   return Equip = Flatbed;
-               when Rail | Air =>
+               when Rail | Sea | Air =>
                   return True;
-               when Sea | Space_Haul =>
+               when Space_Haul =>
                   return False;
             end case;
          when Container_Cargo =>
+            --  ISO / intermodal: all surface + air ULD + game Space_Haul.
             case Mode is
                when Road | Tunnel =>
                   return Equip = Container;
@@ -64,6 +82,8 @@ package body Logistics_Module is
                   return True;
             end case;
          when Dry_Box_Cargo =>
+            --  Enclosed dry van: road box; rail boxcar; sea (prefer container);
+            --  air cargo; not space.
             case Mode is
                when Road | Tunnel =>
                   return Equip = Dry_Box;

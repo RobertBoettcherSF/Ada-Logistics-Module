@@ -28,15 +28,20 @@ Inspired by the public logistics-sim genre only.
 
 ### Cargo ↔ mode (`Compatible`)
 
-| Cargo | Road body | Also |
-|-------|-----------|------|
-| Silo | Silo | Rail, Sea, Tunnel |
-| Tank | Tank | Rail, Sea, Tunnel |
-| Lowboy | Lowboy (required on Road/Tunnel) | Rail/Sea any Equip; **not** Air/Space_Haul |
-| Reefer | Reefer | **Road / Tunnel only** |
-| Flatbed | Flatbed (+ van) | Rail, Air, Tunnel |
-| Container | Container (+ van partial) | Rail, Air, Sea, **Space_Haul**, Tunnel |
-| Dry_Box | Dry_Box (+ van) | Rail, Air, Sea, Tunnel |
+Full matrix (IRL-inspired): [Physical_Data.md](Physical_Data.md) § Cargo compatibility.
+
+| Cargo | Road Equip | Rail | Sea | Air | Space |
+|-------|------------|------|-----|-----|-------|
+| Silo | Silo | ✓ | ✓ | ✗ | ✗ |
+| Tank | Tank | ✓ | ✓ | ✗ | ✗ |
+| Lowboy | Lowboy | ✓ | ✓ | ✗ | ✗ |
+| Reefer | Reefer | ✓ | ✓ | ✓ | ✗ |
+| Flatbed | Flatbed | ✓ | ✓ | ✓ | ✗ |
+| Container | Container | ✓ | ✓ | ✓ | ✓ |
+| Dry_Box | Dry_Box | ✓ | ✓ | ✓ | ✗ |
+
+Tunnel uses the same Equip rule as Road. On non-road modes, Equip is ignored
+(mode owns specialized stock).
 
 ### Space_Haul ≅ Air
 

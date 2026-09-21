@@ -45,11 +45,16 @@ begin
    ------------------------------------------------------------------
    Check (Compatible (Silo_Cargo, Silo, Road), "silo road");
    Check (not Compatible (Silo_Cargo, Tank, Road), "silo not tank");
-   Check (Compatible (Reefer_Cargo, Reefer, Road)
-            and then not Compatible (Reefer_Cargo, Reefer, Rail),
-          "reefer road only");
+   Check (Compatible (Reefer_Cargo, Reefer, Road), "reefer road");
+   Check (not Compatible (Reefer_Cargo, Flatbed, Road), "reefer not flatbed road");
+   Check (Compatible (Reefer_Cargo, Reefer, Rail)
+            and then Compatible (Reefer_Cargo, Dry_Box, Sea)
+            and then Compatible (Reefer_Cargo, Container, Air),
+          "reefer rail/sea/air IRL");
+   Check (not Compatible (Reefer_Cargo, Reefer, Space_Haul), "reefer not space");
    Check (Compatible (Container_Cargo, Container, Space_Haul), "container space_haul");
    Check (not Compatible (Flatbed_Cargo, Flatbed, Space_Haul), "flatbed not space_haul");
+   Check (Compatible (Flatbed_Cargo, Flatbed, Sea), "flatbed sea IRL");
 
    -- Lowboy_Cargo: road/tunnel need Lowboy body; rail/sea any Equip; air/space refuse
    Check (Compatible (Lowboy_Cargo, Lowboy, Road), "lowboy road");
@@ -150,11 +155,18 @@ begin
    Check (Ok, "rail with slot");
    Complete_Delivery (C, Oid, Ok);
 
+   -- IRL: reefer may ride rail (cold cars / containers); need a slot like other rail
    Create_Order (C, A, B, Reefer_Cargo, 5, 700.00, Oid, Ok);
    Make_Offer (C, Oid, 700.00, Off, Ok);
    Accept_Offer (C, Off, Ok);
+   Reserve_Rail_Slot (C, A, B, Slot, Ok);
    Dispatch_Order (C, Oid, Rail, Success => Ok);
-   Check (not Ok, "reefer not rail");
+   Check (Ok, "reefer rail IRL");
+   Complete_Delivery (C, Oid, Ok);
+
+   Create_Order (C, A, B, Reefer_Cargo, 5, 700.00, Oid, Ok);
+   Make_Offer (C, Oid, 700.00, Off, Ok);
+   Accept_Offer (C, Off, Ok);
    Dispatch_Order (C, Oid, Road, Vehicle => 2, Success => Ok);
    Check (Ok, "reefer road");
    Complete_Delivery (C, Oid, Ok);

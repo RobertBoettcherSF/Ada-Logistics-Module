@@ -453,10 +453,10 @@ package Logistics_Module is
 
    -- Cargo/body/mode matrix (see README)
    --  Body × mode gate for a cargo class (does not move freight).
-   --  Lowboy_Cargo pattern (same shape as Silo/Tank):
-   --    Road|Tunnel  => Equip must be Lowboy
-   --    Rail|Sea     => True for any Equip (mode owns the deck)
-   --    Air|Space_Haul => False
+   --  Full IRL-inspired matrix: see Physical_Data.md § Cargo compatibility.
+   --  Road|Tunnel: Equip must match the dedicated road body.
+   --  Other modes: True means the *mode* can carry the class (specialized
+   --  stock); Equip is ignored. Space_Haul: Container only.
    function Compatible
      (Cargo : Cargo_Class;
       Equip : Body_Kind;

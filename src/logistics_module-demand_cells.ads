@@ -191,6 +191,10 @@ package Logistics_Module.Demand_Cells is
       Generation     : Generation_Id := 0;
       Wealth         : Float := Initial_Barge_Budget;
       Inherited      : Float := 0.0;
+      -- Hold bookings are aggregate market state.  Throughput and Fitness
+      -- remain hull based; this is the separately paid cargo-slot metric.
+      Hold_Capacity_kg : Float := 0.0;
+      Hold_Booked_kg   : Float := 0.0;
    end record;
 
    function Init_Barge_Market return Barge_Market;
@@ -200,6 +204,20 @@ package Logistics_Module.Demand_Cells is
    function Current_Barge_Market return Barge_Market;
 
    procedure Clamp_Barge_Pool (Market : in out Barge_Market);
+
+   -- Slot bids use total coin for the requested mass (not a per-kg bid).
+   function Ask_Per_Kg (Market : Barge_Market) return Float;
+   function Remaining_Hold_kg (Market : Barge_Market) return Float;
+
+   function Bid_Hold_Slot
+     (Market     : in out Barge_Market;
+      Mass_kg    : Float;
+      Bid_Amount : Float) return Boolean;
+   procedure Bid_Hold_Slot
+     (Market     : in out Barge_Market;
+      Mass_kg    : Float;
+      Bid_Amount : Float;
+      Success    : out Boolean);
 
    function Bid_For_Barge
      (Market     : in out Barge_Market;
@@ -235,6 +253,17 @@ package Logistics_Module.Demand_Cells is
       Market : Barge_Market);
 
    procedure Clamp_Barge_Pool (Cell : in out Demand_Cell);
+
+   function Remaining_Hold_kg (Cell : Demand_Cell) return Float;
+   function Bid_Hold_Slot
+     (Cell       : in out Demand_Cell;
+      Mass_kg    : Float;
+      Bid_Amount : Float) return Boolean;
+   procedure Bid_Hold_Slot
+     (Cell       : in out Demand_Cell;
+      Mass_kg    : Float;
+      Bid_Amount : Float;
+      Success    : out Boolean);
 
    function Bid_For_Barge
      (Cell       : in out Demand_Cell;

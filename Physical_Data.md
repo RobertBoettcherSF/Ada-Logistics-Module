@@ -153,6 +153,16 @@ to owned and charges `Wealth`. `Clamp_Barge_Pool` enforces the 0..100 owned
 bound. `End_Generation` increments `Generation` and passes remaining wealth
 through `Inherited` to the next generation; owned barges remain family assets.
 
+Whole-vessel ownership and cargo holds are separate market products. Each
+owned `Barge_Inner` contributes `Barge_Cargo_Mass_kg` (1,045,000 kg) to
+`Hold_Capacity_kg`; `Hold_Booked_kg` records paid partial-cargo bookings and
+`Remaining_Hold_kg` is capacity minus booked mass. `Ask_Per_Kg` is derived as
+`Ask_Price / Barge_Cargo_Mass_kg`. `Bid_Hold_Slot` uses total-coin
+`Bid_Amount` for the requested kg, rejects non-positive, over-capacity,
+under-ask, or unaffordable bids, and charges `Wealth` on success. Hull-based
+Fitness/throughput is unchanged; booked kg is tracked as a separate paid
+metric.
+
 
 | Species | Cruise m/s | Cargo kg | Gross kg |
 |---------|------------|----------|----------|

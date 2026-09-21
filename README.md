@@ -120,9 +120,16 @@ Throughput/(ships×gross); `Life_Tick` spawn/prefer/cull by Fitness; appends `si
 Barges use a shared `Barge_Market` (educational demo coins, separate from
 `Company` money): the pool is capped at 100 with a policy floor of 12,
 `Initial_Barge_Budget` is 1,000,000 coins, and each barge must clear the
-current `Ask_Price`. `Bid_For_Barge` transfers wealth into ownership and the
-fleet; a cull returns the barge to the available pool. `End_Generation`
-increments `Generation` and passes all remaining `Wealth` through `Inherited`.
+current `Ask_Price`. `Bid_For_Barge` is the whole-vessel path: it transfers wealth into ownership
+and the fleet; a cull returns the barge to the available pool. Owned hulls also
+expose `Hold_Capacity_kg`, `Hold_Booked_kg`, and `Remaining_Hold_kg`.
+`Bid_Hold_Slot` books a partial cargo hold in kg and charges `Bid_Amount` as
+total coin for that slot; the bid must be at least `Ask_Per_Kg * Mass_kg` and
+within remaining capacity and wealth. Fitness/throughput remains hull based,
+while booked kg is the separately paid hold metric. `Life_Tick` fills a local
+owned hull's remaining hold before buying another barge when the market permits.
+`End_Generation` increments `Generation` and passes all remaining `Wealth`
+through `Inherited`.
 Call `Seed_Cell_With_Barge_Market` for a fresh global market; `play` seeds the
 initial evolution fleet toward the 12-barge floor when its budget permits.
 

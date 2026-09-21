@@ -860,7 +860,9 @@ begin
       Life_Tick (Cell, 0.0, Log => False);
       Check (Cell.Preferred = Best_Species (Dist),
              "Life_Tick prefers best fitness species");
-      Check (Cell.Fleet (Cell.Preferred) = 1, "Life_Tick spawns one");
+      Check (Cell.Fleet (Cell.Preferred) = 1
+               or else Current_Barge_Market.Hold_Booked_kg > 0.0,
+             "Life_Tick spawns or fills a barge");
       Check (Current_Barge_Market.Pool_Owned >= Barge_Pool_Min,
              "Life_Tick starts toward minimum barge pool");
 
@@ -1420,7 +1422,9 @@ begin
          Ask_Price      => Barge_Unit_Price,
          Generation     => 0,
          Wealth         => 0.0,
-         Inherited      => 0.0);
+         Inherited      => 0.0,
+         Hold_Capacity_kg => 0.0,
+         Hold_Booked_kg   => 0.0);
       Cell   : Demand_Cell :=
         (Demand_Rate_kg_s => 1.0,
          Stock_kg         => 0.0,
@@ -1430,6 +1434,9 @@ begin
          Preferred        => Barge_Inner,
          Cell_Id          => 99);
       Old_Wealth : Float;
+      Slot_Market : Barge_Market := Init_Barge_Market;
+      Slot_Remaining : Float;
+      Slot_Wealth : Float;
    begin
       pragma Warnings (Off, "condition is always True");
       Check (Barge_Pool_Min = 12 and then Barge_Pool_Max = 100,
@@ -1447,6 +1454,34 @@ begin
              "barge bid moves pool to owned");
       Check (Market.Wealth < Initial_Barge_Budget,
              "barge bid charges generation wealth");
+      Check (abs (Market.Hold_Capacity_kg - Barge_Cargo_Mass_kg) < 0.1
+               and then abs (Remaining_Hold_kg (Market)
+                 - Barge_Cargo_Mass_kg) < 0.1,
+             "owned barge exposes hold capacity");
+      Slot_Remaining := Remaining_Hold_kg (Market);
+      Slot_Wealth := Market.Wealth;
+      Check (Bid_Hold_Slot
+               (Market, 1_000.0, Ask_Per_Kg (Market) * 1_000.0),
+             "hold slot bid succeeds");
+      Check (abs (Remaining_Hold_kg (Market) - (Slot_Remaining - 1_000.0)) < 0.1
+               and then Market.Wealth < Slot_Wealth,
+             "hold slot reduces remaining and charges wealth");
+      Check (not Bid_Hold_Slot
+               (Market, Remaining_Hold_kg (Market) + 1.0, 1.0e9),
+             "hold slot overfill rejected");
+      Check (not Bid_Hold_Slot
+               (Market, 1_000.0, Ask_Per_Kg (Market) * 1_000.0 - 1.0),
+             "hold slot poor bid rejected");
+      Check (Bid_For_Barge (Slot_Market, Slot_Market.Ask_Price)
+               and then Bid_Hold_Slot
+                 (Slot_Market, Barge_Cargo_Mass_kg / 2.0,
+                  Ask_Per_Kg (Slot_Market) * Barge_Cargo_Mass_kg / 2.0)
+               and then (Remaining_Hold_kg (Slot_Market) > 0.0)
+               and then Bid_Hold_Slot
+                 (Slot_Market, Remaining_Hold_kg (Slot_Market),
+                  Ask_Per_Kg (Slot_Market) * Remaining_Hold_kg (Slot_Market))
+               and then Remaining_Hold_kg (Slot_Market) < 0.1,
+             "full hold possible through slots");
 
       Market.Pool_Owned := Barge_Pool_Max + 5;
       Market.Pool_Available := Barge_Pool_Max;

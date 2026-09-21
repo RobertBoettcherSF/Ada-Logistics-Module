@@ -20,7 +20,9 @@ package body Logistics_Module.Demand_Cells is
       Ask_Price      => Barge_Unit_Price,
       Generation     => 0,
       Wealth         => Initial_Barge_Budget,
-      Inherited      => 0.0);
+      Inherited      => 0.0,
+      Hold_Capacity_kg => 0.0,
+      Hold_Booked_kg   => 0.0);
 
    function Init_Barge_Market return Barge_Market is
    begin
@@ -30,7 +32,9 @@ package body Logistics_Module.Demand_Cells is
          Ask_Price      => Barge_Unit_Price,
          Generation     => 0,
          Wealth         => Initial_Barge_Budget,
-         Inherited      => 0.0);
+         Inherited      => 0.0,
+         Hold_Capacity_kg => 0.0,
+         Hold_Booked_kg   => 0.0);
    end Init_Barge_Market;
 
    procedure Init_Barge_Market (Market : out Barge_Market) is
@@ -53,6 +57,15 @@ package body Logistics_Module.Demand_Cells is
       if Market.Pool_Available > Max_Available then
          Market.Pool_Available := Max_Available;
       end if;
+      Market.Hold_Capacity_kg :=
+        Float (Market.Pool_Owned) * Barge_Cargo_Mass_kg;
+      if Market.Hold_Booked_kg < 0.0 then
+         Market.Hold_Booked_kg := 0.0;
+      elsif Market.Hold_Booked_kg > Market.Hold_Capacity_kg then
+         -- A cull can remove a hull with open bookings.  Do not let old
+         -- bookings make a newly available hull look over-filled.
+         Market.Hold_Booked_kg := Market.Hold_Capacity_kg;
+      end if;
       if Market.Ask_Price <= 0.0 then
          Market.Ask_Price := Barge_Unit_Price;
       end if;
@@ -63,6 +76,59 @@ package body Logistics_Module.Demand_Cells is
          Market.Inherited := 0.0;
       end if;
    end Clamp_Barge_Pool;
+
+   function Ask_Per_Kg (Market : Barge_Market) return Float is
+   begin
+      if Barge_Cargo_Mass_kg <= 0.0 then
+         return 0.0;
+      end if;
+      return Market.Ask_Price / Barge_Cargo_Mass_kg;
+   end Ask_Per_Kg;
+
+   function Remaining_Hold_kg (Market : Barge_Market) return Float is
+      Capacity : constant Float :=
+        Float (Market.Pool_Owned) * Barge_Cargo_Mass_kg;
+   begin
+      if Capacity > Market.Hold_Booked_kg then
+         return Capacity - Market.Hold_Booked_kg;
+      else
+         return 0.0;
+      end if;
+   end Remaining_Hold_kg;
+
+   function Bid_Hold_Slot
+     (Market     : in out Barge_Market;
+      Mass_kg    : Float;
+      Bid_Amount : Float) return Boolean
+   is
+      Minimum_Bid : Float;
+   begin
+      Clamp_Barge_Pool (Market);
+      Minimum_Bid := Ask_Per_Kg (Market) * Mass_kg;
+      if Mass_kg <= 0.0
+        or else Mass_kg > Remaining_Hold_kg (Market)
+        or else Bid_Amount < Minimum_Bid
+        or else Bid_Amount > Market.Wealth
+        or else Bid_Amount <= 0.0
+      then
+         return False;
+      end if;
+
+      Market.Wealth := Market.Wealth - Bid_Amount;
+      Market.Hold_Booked_kg := Market.Hold_Booked_kg + Mass_kg;
+      Clamp_Barge_Pool (Market);
+      return True;
+   end Bid_Hold_Slot;
+
+   procedure Bid_Hold_Slot
+     (Market     : in out Barge_Market;
+      Mass_kg    : Float;
+      Bid_Amount : Float;
+      Success    : out Boolean)
+   is
+   begin
+      Success := Bid_Hold_Slot (Market, Mass_kg, Bid_Amount);
+   end Bid_Hold_Slot;
 
    function Bid_For_Barge
      (Market     : in out Barge_Market;
@@ -248,12 +314,54 @@ package body Logistics_Module.Demand_Cells is
       Success := Bid_For_Barge (Cell, Bid_Amount);
    end Bid_For_Barge;
 
+   function Remaining_Hold_kg (Cell : Demand_Cell) return Float is
+      pragma Unreferenced (Cell);
+   begin
+      return Remaining_Hold_kg (Shared_Barge_Market);
+   end Remaining_Hold_kg;
+
+   function Bid_Hold_Slot
+     (Cell       : in out Demand_Cell;
+      Mass_kg    : Float;
+      Bid_Amount : Float) return Boolean
+   is
+      pragma Unreferenced (Cell);
+   begin
+      return Bid_Hold_Slot (Shared_Barge_Market, Mass_kg, Bid_Amount);
+   end Bid_Hold_Slot;
+
+   procedure Bid_Hold_Slot
+     (Cell       : in out Demand_Cell;
+      Mass_kg    : Float;
+      Bid_Amount : Float;
+      Success    : out Boolean)
+   is
+   begin
+      Success := Bid_Hold_Slot (Cell, Mass_kg, Bid_Amount);
+   end Bid_Hold_Slot;
+
    procedure Try_Barge_Bid (Cell : in out Demand_Cell) is
    begin
       if Bid_For_Barge (Cell, Shared_Barge_Market.Ask_Price) then
          null;
       end if;
    end Try_Barge_Bid;
+
+   function Try_Hold_Bid (Cell : in out Demand_Cell) return Boolean is
+      Need      : constant Float := Deficit_kg (Cell);
+      Remaining : constant Float := Remaining_Hold_kg (Cell);
+      Mass      : constant Float := Float'Min (Need, Remaining);
+      Bid       : constant Float := Ask_Per_Kg (Shared_Barge_Market) * Mass;
+   begin
+      if Cell.Fleet (Barge_Inner) = 0
+        or else Shared_Barge_Market.Pool_Owned = 0
+        or else Mass <= 0.0
+        or else Bid > Shared_Barge_Market.Wealth
+      then
+         return False;
+      end if;
+      return Bid_Hold_Slot (Cell, Mass, Bid);
+   end Try_Hold_Bid;
 
    procedure End_Generation (Cell : in out Demand_Cell) is
    begin
@@ -656,12 +764,16 @@ package body Logistics_Module.Demand_Cells is
          if Under_Served (Cell) then
             Best := Best_Species (Cell.Distance_m);
             Cell.Preferred := Best;
-            if Best = Barge_Inner then
-               -- Barges are scarce capital: only a successful market bid may
-               -- add one.  Other species keep the old educational spawn path.
-               Try_Barge_Bid (Cell);
-            else
-               Cell.Fleet (Best) := Cell.Fleet (Best) + 1;
+            -- Fill an owned hull before buying another one.  A slot is paid
+            -- for by mass; Fitness/throughput remains hull based.
+            if not Try_Hold_Bid (Cell) then
+               if Best = Barge_Inner then
+                  -- Barges are scarce capital: only a successful market bid may
+                  -- add one.  Other species keep the old educational spawn path.
+                  Try_Barge_Bid (Cell);
+               else
+                  Cell.Fleet (Best) := Cell.Fleet (Best) + 1;
+               end if;
             end if;
          elsif Over_Served (Cell) then
             Worst := Worst_Present (Cell);
@@ -769,10 +881,12 @@ package body Logistics_Module.Demand_Cells is
             if Under_Served (Cell) then
                -- Bias spawn to max Score/Reward winners (Fitness formula untouched).
                Cell.Preferred := W;
-               if W = Barge_Inner then
-                  Try_Barge_Bid (Cell);
-               else
-                  Cell.Fleet (W) := Cell.Fleet (W) + 1;
+               if not Try_Hold_Bid (Cell) then
+                  if W = Barge_Inner then
+                     Try_Barge_Bid (Cell);
+                  else
+                     Cell.Fleet (W) := Cell.Fleet (W) + 1;
+                  end if;
                end if;
             elsif Over_Served (Cell) then
                Worst := Worst_Present (Cell);

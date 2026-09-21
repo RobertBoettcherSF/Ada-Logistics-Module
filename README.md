@@ -32,7 +32,7 @@ Inspired by the public logistics-sim genre only.
 |-------|-----------|------|
 | Silo | Silo | Rail, Sea, Tunnel |
 | Tank | Tank | Rail, Sea, Tunnel |
-| Lowboy | Lowboy | Rail, Sea, Tunnel |
+| Lowboy | Lowboy (required on Road/Tunnel) | Rail/Sea any Equip; **not** Air/Space_Haul |
 | Reefer | Reefer | **Road / Tunnel only** |
 | Flatbed | Flatbed (+ van) | Rail, Air, Tunnel |
 | Container | Container (+ van partial) | Rail, Air, Sea, **Space_Haul**, Tunnel |

@@ -1,6 +1,6 @@
 GNATFLAGS = -gnatwa -gnat2022 -gnata
 
-.PHONY: all test play clean
+.PHONY: all test play run clean
 
 all: test
 
@@ -13,6 +13,9 @@ play:
 	mkdir -p obj bin
 	gnatmake $(GNATFLAGS) -D obj -Isrc src/play.adb -o bin/play
 	./bin/play
+
+# Alias used by local clones expecting `make run`
+run: play
 
 clean:
 	rm -rf obj bin

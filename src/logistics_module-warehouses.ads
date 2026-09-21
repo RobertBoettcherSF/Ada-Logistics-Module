@@ -3,8 +3,6 @@
 
 pragma Ada_2022;
 
-with Logistics_Module;
-
 package Logistics_Module.Warehouses is
 
    Max_Warehouses     : constant := 16;
@@ -164,14 +162,14 @@ private
       Location     : Warehouse_Location := (others => <>);
       Capacity     : Mass_kg := 0.0;
       Used         : Mass_kg := 0.0;
-      Slots        : Stock_Slots := (others => (others => <>));
+      Slots        : Stock_Slots := [others => <>];
       Active       : Boolean := False;
    end record;
 
    type Warehouse_Array is array (Warehouse_Id) of Warehouse_Record;
 
    type Warehouse_Registry is record
-      Warehouses : Warehouse_Array := (others => (others => <>));
+      Warehouses : Warehouse_Array := [others => <>];
       Count      : Natural := 0;
    end record;
 

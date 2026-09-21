@@ -781,10 +781,12 @@ begin
       Dist : constant Float := 1.0e11;  -- long haul (~0.67 AU)
       F_Fast, F_Barge : Float;
    begin
+      pragma Warnings (Off, "condition is always True");
       Check (c_m_s = 299_792_458, "c_m_s constant");
       Check (AU_m > 1.4e11 and then AU_m < 1.6e11, "AU_m SI ~1.496e11");
       Check (Barge_Gross_Mass_kg = 1_900_000.0, "barge gross 1.9e6 kg");
       Check (Barge_Cargo_Mass_kg = 1_045_000.0, "barge cargo 0.55 gross");
+      pragma Warnings (On, "condition is always True");
       Check (abs (Barge_Cargo_Mass_kg - 0.55 * Barge_Gross_Mass_kg) < 1.0,
              "cargo is 0.55 of gross");
       Check (Cruise_Speed_m_s (Barge_Inner) = 3_000.0, "Barge_Inner cruise");
@@ -933,7 +935,9 @@ begin
       Check (Default_Separation_m (Tunnel) = 50.0, "ATC Tunnel Separation_m 50");
       Check (Default_Separation_m (Space_Haul) = 50_000.0,
              "ATC Space_Haul Separation_m 50000");
+      pragma Warnings (Off, "condition is always True");
       Check (Space_Haul_Capacity_Cap = 8, "ATC Space_Haul capacity cap 8");
+      pragma Warnings (On, "condition is always True");
 
       Cap := Capacity_From_Corridor (1_000.0, 100.0, Road);
       Check (Cap = 10, "ATC Road capacity from corridor 1000/100");
@@ -1275,8 +1279,10 @@ begin
       Dr : Float;
       V_Moon, V_Mars : Float;
    begin
+      pragma Warnings (Off, "condition is always True");
       Check (Consumables_kg_person_day = 2.5, "Consumables_kg_person_day 2.5");
       Check (Crew_150 = 150, "Crew_150 constant");
+      pragma Warnings (On, "condition is always True");
       Dr := Demand_Rate_kg_s (Crew_150);
       Check (abs (Dr - Float (Crew_150) * 2.5 / 86_400.0) < 1.0e-9,
              "Demand_Rate_kg_s crew*kg_d/86400");
@@ -1374,7 +1380,7 @@ begin
       Registry : Warehouse_Registry := Create_Registry;
       Wid      : Warehouse_Id;
       Ok_W     : Boolean;
-      Ship     : Ship_Class := Barge_Inner;
+      Ship     : constant Ship_Class := Barge_Inner;
    begin
       Create_Warehouse (Registry, Terra_0, Capacity => 1_000.0,
                         Id => Wid, Success => Ok_W);

@@ -32,7 +32,7 @@ package body Logistics_Module.Warehouses is
          Location => Location,
          Capacity => Capacity,
          Used     => 0.0,
-         Slots    => (others => (others => <>)),
+         Slots    => [others => <>],
          Active   => True);
       Success := True;
    end Create_Warehouse;

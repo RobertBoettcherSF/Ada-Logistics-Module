@@ -168,7 +168,7 @@ and the test main is in `tests/`. The Makefile is the primary build entry point.
 
 ```bash
 make test   # compile and run the test suite
-make play   # Text_IO MVP: jobs / assign / tick
+make play   # or: make run   # Text_IO MVP: jobs / assign / tick
 make clean  # remove generated obj/ and bin/ directories
 ```
 

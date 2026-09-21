@@ -355,7 +355,7 @@ package body Logistics_Module.Supply_Agents is
       Delta_s          : Float := 1_296_000.0;
       Distance_m       : Float := Mars_Offset_m;
       Oversupply_Cap   : Float := 1.80;
-      Sweep_Min_Barges : Natural := 1;
+      Sweep_Min_Barges : Natural := Barge_Pool_Min;
       Min_Barges       : out Natural;
       Achieved_Ratio   : out Float;
       Ok               : out Boolean)

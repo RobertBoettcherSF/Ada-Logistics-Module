@@ -67,16 +67,15 @@ package Logistics_Module.Supply_Agents is
       Under_Fraction : out Float);
 
    --  Scenario 2: find the smallest operational N whose sustained ratio is in
-   --  [1.0, Oversupply_Cap].  Sweep_Min_Barges defaults to one operational hull
-   --  because the shared market policy floor (12) is a pool reserve, not a
-   --  physical requirement for this sizing lens.
+   --  [1.0, Oversupply_Cap].  Sweep_Min_Barges defaults to the shared market
+   --  policy floor; callers may pass one for an operational-hull lens.
    procedure Size_Min_Barges_Oversupply
      (Crew               : Positive := 150;
       N_Ticks            : Positive := 6000;
       Delta_s            : Float := 1_296_000.0;
       Distance_m         : Float := Logistics_Module.Mars_Offset_m;
       Oversupply_Cap     : Float := 1.80;
-      Sweep_Min_Barges   : Natural := 1;
+      Sweep_Min_Barges   : Natural := Logistics_Module.Demand_Cells.Barge_Pool_Min;
       Min_Barges         : out Natural;
       Achieved_Ratio     : out Float;
       Ok                 : out Boolean);

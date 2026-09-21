@@ -221,11 +221,11 @@ Over_Supply_Ratio = Throughput_kg_s / Demand_Rate_kg_s
 1.0 <= Over_Supply_Ratio <= Oversupply_Cap   -- default 1.80 (+80%)
 ```
 
-The sizing API's `Sweep_Min_Barges` default is one operational hull: the
-existing `Barge_Pool_Min = 12` is a market reserve floor, and at Crew=150
-forcing twelve active barges would exceed the +80% ratio. Callers that require
-the policy floor can pass `Sweep_Min_Barges => Barge_Pool_Min` and receive
-`Ok = False` when no bounded candidate exists. `Over_Served` means positive
+The sizing API defaults `Sweep_Min_Barges` to `Barge_Pool_Min` and therefore
+honours the market policy floor. The `make size` demo explicitly passes one
+operational hull to show a valid +80% physical sizing lens; at Crew=150,
+forcing twelve active barges exceeds that ratio. Callers using the default
+policy floor receive `Ok = False` when no bounded candidate exists. `Over_Served` means positive
 stock through the cell horizon, at least one ship, and ratio > 1.0.
 
 At generation end, the top two gene records are retained and three offspring

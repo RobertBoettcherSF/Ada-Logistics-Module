@@ -226,10 +226,10 @@ hold-slot bids fill available cargo capacity first for hold-preferring agents.
   reports mean `Undersupply_kg` plus the fraction of `Under_Served` ticks.
 * `Size_Min_Barges_Oversupply` sweeps operational N and accepts only a
   sustained `Over_Served` cell with `Over_Supply_Ratio = Throughput /
-  Demand_Rate` in `[1.0, 1.80]`. `Sweep_Min_Barges` defaults to 1 because
-  `Barge_Pool_Min = 12` is the shared-market reserve policy, not a physical
-  requirement for this lens; pass 12 when the policy floor itself is the
-  constraint.
+  Demand_Rate` in `[1.0, 1.80]`. `Sweep_Min_Barges` defaults to `Barge_Pool_Min` as requested. The `make size`
+  demo explicitly passes 1 as an operational-hull lens because twelve active
+  barges at Crew=150 exceed the +80% ratio; pass 12 when the policy floor
+  itself is the constraint.
 
 `End_Generation` preserves the top two agents and gives the other three
 crossover/mutation offspring; `Agent_Death` respawns from the current best

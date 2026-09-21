@@ -185,10 +185,31 @@ and the test main is in `tests/`. The Makefile is the primary build entry point.
 ```bash
 make test   # compile and run the test suite
 make play   # or: make run   # Text_IO MVP: jobs / assign / tick
+make size   # 6000-tick crewed-station fleet sizing demo
 make clean  # remove generated obj/ and bin/ directories
 ```
 
 The test and play builds use `-gnatwa -gnat2022 -gnata`.
+
+
+### Station fleet sizing
+
+`Logistics_Module.Station_Sizing` sizes a human-only 150-person station
+against a lean Earth--Mars demand cell. It combines life-support consumables
+(2.5 kg/person/day) with small spare-parts, power-logistics, and
+thermal/fluids/cabling cargo stubs (2.7 kg/person/day total); these are
+educational rates, not NASA programme numbers. The demo uses 15 days per
+tick (`Delta_s = 1_296_000.0`) for 6000 ticks (~246 years), a roughly
+centuries-scale fictional horizon, and a barge market with hold-slot bids.
+
+```bash
+make size
+```
+
+The fixed-mix sweep runs the tournament tick loop without evolutionary
+mutation while measuring each candidate. It reports the first sustained
+`(Barge_Inner, Fast_Courier, Relativistic_Stub)` mix in lexicographic order;
+the market's 12-barge policy floor and pool cap are respected.
 
 ### MVP play loop
 

@@ -34,6 +34,13 @@ Integer/cm APIs already in a module (e.g. `Speed_Cm_S`) may stay; document the u
 Copies of this file in sibling repos should stay short and aligned; Logistics is canonical.
 
 
+
+## Station sizing
+
+`Station_Cargo_Band` rates are kg/person/day; the sizing API converts their
+sum to `Demand_Rate_kg_s` using `Seconds_Per_Day_s = 86_400`. The educational
+long-horizon demo uses `Delta_s = 1_296_000.0` s (15 days per tick).
+
 ## Vehicle spatiotemporal state
 
 Vehicles expose `Position_m` and `Route_From`/`Route_To` in SI metres, with

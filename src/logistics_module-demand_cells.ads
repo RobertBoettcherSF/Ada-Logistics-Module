@@ -364,7 +364,8 @@ package Logistics_Module.Demand_Cells is
    with
      Pre => Delta_s >= 0.0;
 
-   -- N automated ticks; accrue Score/Reward; spawn biased to winners
+   -- N automated ticks; accrue Score/Reward; spawn biased to winners.
+   -- Evolve => False is a fixed-fleet probe for sizing sweeps.
    procedure Run_Tournament_Ticks
      (Cell      : in out Demand_Cell;
       State     : in out Tournament_State;
@@ -373,7 +374,8 @@ package Logistics_Module.Demand_Cells is
       T0_s      : Float := 0.0;
       Log       : Boolean := True;
       Path      : String := Sim_Log_Path;
-      Time_Rate : Float := 1.0)
+      Time_Rate : Float := 1.0;
+      Evolve    : Boolean := True)
    with
      Pre => Delta_s >= 0.0;
 

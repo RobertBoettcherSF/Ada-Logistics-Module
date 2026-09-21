@@ -8,6 +8,7 @@ with Ada.Strings.Fixed;
 with Logistics_Module; use Logistics_Module;
 with Logistics_Module.Demand_Cells;
 use Logistics_Module.Demand_Cells;
+with Logistics_Module.Station_Sizing;
 with Logistics_Module.Warehouses;
 use Logistics_Module.Warehouses;
 with Logistics_Module.ATC;
@@ -1510,6 +1511,45 @@ begin
                and then Cell.Fleet (Barge_Inner) = 1
                and then Current_Barge_Market.Pool_Owned = 1,
              "cell barge bid adds owned fleet unit");
+   end;
+
+
+   ------------------------------------------------------------------
+   -- Crewed station sizing: cargo bands, short sweep, bounded market
+   ------------------------------------------------------------------
+   declare
+      B, C, R       : Natural;
+      Final_Deficit : Float;
+      Sustained     : Boolean;
+      Expected_Rate : constant Float :=
+        150.0 * Logistics_Module.Station_Sizing.Total_Station_kg_person_day
+        / Seconds_Per_Day_s;
+   begin
+      Check (Logistics_Module.Station_Sizing.Kg_Per_Person_Day
+               (Logistics_Module.Station_Sizing.Consumables) > 0.0
+               and then Logistics_Module.Station_Sizing.Kg_Per_Person_Day
+                 (Logistics_Module.Station_Sizing.Spare_Parts) > 0.0
+               and then Logistics_Module.Station_Sizing.Kg_Per_Person_Day
+                 (Logistics_Module.Station_Sizing.Power_Logistics) > 0.0
+               and then Logistics_Module.Station_Sizing.Kg_Per_Person_Day
+                 (Logistics_Module.Station_Sizing.Thermal_Fluids_Cabling) > 0.0,
+             "station cargo band rates > 0");
+      Check (abs (Logistics_Module.Station_Sizing.Total_Demand_Rate_kg_s -
+                    Expected_Rate) < 1.0e-7,
+             "station total demand rate is SI kg/s");
+      Logistics_Module.Station_Sizing.Size_Station_Fleet
+        (N_Ticks        => 50,
+         Min_Barges     => B,
+         Min_Couriers   => C,
+         Min_Rel_Stubs  => R,
+         Final_Deficit_kg => Final_Deficit,
+         Sustained      => Sustained);
+      Check (Sustained and then Final_Deficit >= 0.0,
+             "short station sizing finds sustained fleet");
+      Check (B >= Barge_Pool_Min and then B <= Barge_Pool_Max
+               and then C <= Logistics_Module.Station_Sizing.Search_Max_Couriers
+               and then R <= Logistics_Module.Station_Sizing.Search_Max_Rel_Stubs,
+             "station sizing respects fleet pool/search limits");
    end;
 
    New_Line;

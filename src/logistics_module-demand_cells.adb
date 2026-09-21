@@ -842,7 +842,8 @@ package body Logistics_Module.Demand_Cells is
       T0_s      : Float := 0.0;
       Log       : Boolean := True;
       Path      : String := Sim_Log_Path;
-      Time_Rate : Float := 1.0)
+      Time_Rate : Float := 1.0;
+      Evolve    : Boolean := True)
    is
       T     : Float := T0_s;
       W     : Fleet_Species;
@@ -876,7 +877,7 @@ package body Logistics_Module.Demand_Cells is
          end if;
 
          Tick_Cell (Cell, Delta_s);
-         if Cell.Distance_m > 0.0 then
+         if Evolve and then Cell.Distance_m > 0.0 then
             Clamp_Barge_Pool (Cell);
             if Under_Served (Cell) then
                -- Bias spawn to max Score/Reward winners (Fitness formula untouched).

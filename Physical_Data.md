@@ -225,6 +225,24 @@ Lean stubs: `Moon_Polar` ≈ 3.84×10⁸ m; `Mars` ≈ 2.25×10¹¹ m; Venus/Tit
 
 See also [SI_Units.md](SI_Units.md) (shared Ada naming pattern).
 
+
+## Crewed station cargo bands (educational SI)
+
+The station sizing demo uses a 150-person human crew and lean cargo bands.
+Rates are kg/person/day and are deliberately educational stubs, not NASA
+program numbers. `Demand_Rate_kg_s = Crew × sum(band rates) / 86_400`.
+
+| `Station_Cargo_Band` | kg/person/day | Meaning |
+|---|---:|---|
+| `Consumables` | 2.50 | life-support consumables / crew kit; maps to existing `Consumables` |
+| `Spare_Parts` | 0.10 | small maintenance and replacement flow |
+| `Power_Logistics` | 0.05 | PV, battery, and fuel-cell logistics stub |
+| `Thermal_Fluids_Cabling` | 0.05 | thermal, fluids, and cabling stub |
+| **Total** | **2.70** | station demand input |
+
+The demo uses `Crew_N = 150`, `Delta_s = 1_296_000.0` (15 days), and
+`Distance_m = 2.25e11` (lean Earth--Mars offset).
+
 ## Tournament score (fuel-adjusted)
 
 | Symbol | Formula |

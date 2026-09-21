@@ -175,7 +175,9 @@ Score_Ref from Barge_Inner at ref distance. Cruise still < c. Extreme speed can 
 
 ## Cargo compatibility (IRL-inspired, educational)
 
-`Compatible (Cargo_Class, Body_Kind, Dispatch_Mode)` — not legal/ADR text.
+`Compatible (Cargo_Class, Body_Kind, Dispatch_Mode[, Hazard])` — thin educational
+DG wiring, not legal/ADR/IATA text. The hazard-aware overload always applies
+`Mode_Allows_Hazard`; Tank cargo may use Air/Space_Haul only with `Hazard = None`.
 
 **Road / Tunnel:** dedicated road body required (`Equip` must match).  
 **Rail / Sea / Air / Space_Haul:** `True` means the *mode* can carry that class
@@ -185,12 +187,15 @@ with specialized stock; road `Equip` is ignored.
 | Cargo_Class | Road body | Tunnel | Rail | Sea | Air | Space_Haul | IRL note |
 |-------------|-----------|--------|------|-----|-----|------------|----------|
 | Silo | Silo | = Road | Yes (hopper) | Yes (bulk) | No | No | Dry bulk |
-| Tank | Tank | = Road | Yes (tank car) | Yes (tanker) | No | No | Liquids/gases; air/space DG-sensitive |
+| Tank | Tank | = Road | Yes (tank car) | Yes (tanker) | Yes* | Yes* | Air/space only with Hazard=None; educational DG stub |
 | Lowboy | Lowboy | = Road | Yes (heavy flat) | Yes (RoRo / HL) | No | No | Oversize / plant |
 | Reefer | Reefer | = Road | Yes | Yes (reefer box) | Yes (cool cargo) | No | Cold chain |
 | Flatbed | Flatbed | = Road | Yes (flatcar) | Yes (breakbulk) | Yes (pallet/ULD) | No | Open deck |
 | Container | Container | = Road | Yes | Yes | Yes (ULD) | **Yes** | Intermodal |
 | Dry_Box | Dry_Box | = Road | Yes (boxcar) | Yes | Yes | No | Enclosed dry van |
+
+`*` Air/Space tank acceptance is restricted to `Hazard = None`; other hazards
+must pass `Mode_Allows_Hazard`, and this model is not ADR/IATA compliance.
 
 Product kinds (`Cargo_Kind`) still use `Allows_Body` then this matrix via
 `To_Cargo_Class` (`Food_Cold`/`Pharma_Cold` → Reefer, etc.).

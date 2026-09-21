@@ -56,6 +56,19 @@ begin
    Check (not Compatible (Flatbed_Cargo, Flatbed, Space_Haul), "flatbed not space_haul");
    Check (Compatible (Flatbed_Cargo, Flatbed, Sea), "flatbed sea IRL");
 
+   -- Thin educational Tank × Air/Space DG wiring (not ADR/IATA).
+   Check (Compatible (Tank_Cargo, Tank, Air, None),
+         "non-DG tank air");
+   Check (not Compatible (Tank_Cargo, Tank, Air, Flammable_Liquids),
+         "flammable tank air denied");
+   Check (not Compatible (Tank_Cargo, Tank, Space_Haul, Gases),
+         "gas tank space denied");
+   Check (Compatible (Tank_Cargo, Tank, Sea, Flammable_Liquids)
+            and then Mode_Allows_Hazard (Sea, Flammable_Liquids),
+         "flammable tank sea allowed");
+   Check (Compatible (Tank_Cargo, Tank, Air),
+         "three-arg tank air means non-DG");
+
    -- Lowboy_Cargo: road/tunnel need Lowboy body; rail/sea any Equip; air/space refuse
    Check (Compatible (Lowboy_Cargo, Lowboy, Road), "lowboy road");
    Check (not Compatible (Lowboy_Cargo, Flatbed, Road), "lowboy not flatbed road");
@@ -184,6 +197,21 @@ begin
    Dispatch_Order (C, Oid, Sea, Success => Ok);
    Check (Ok, "sea ok");
    Complete_Delivery (C, Oid, Ok);
+
+   Create_Order (C, A, B, Tank_Cargo, 1, 1_000.00, Oid, Ok);
+   Make_Offer (C, Oid, 1_000.00, Off, Ok);
+   Accept_Offer (C, Off, Ok);
+   Dispatch_Order (C, Oid, Air, Success => Ok);
+   Check (Ok, "non-DG tank air dispatch");
+   Complete_Delivery (C, Oid, Ok);
+
+   Create_Order
+     (C, A, B, Tank_Cargo, 1, 1_000.00, Oid, Ok,
+      Hazard => Flammable_Liquids);
+   Make_Offer (C, Oid, 1_000.00, Off, Ok);
+   Accept_Offer (C, Off, Ok);
+   Dispatch_Order (C, Oid, Air, Success => Ok);
+   Check (not Ok, "DG tank air dispatch rejected");
 
    Create_Order (C, Sp1, Sp2, Container_Cargo, 3, 5_000.00, Oid, Ok);
    Make_Offer (C, Oid, 5_000.00, Off, Ok);

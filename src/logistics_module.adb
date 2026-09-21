@@ -9,90 +9,91 @@ package body Logistics_Module is
    use type Ada.Calendar.Time;
 
    function Compatible
+     (Cargo  : Cargo_Class;
+      Equip  : Body_Kind;
+      Mode   : Dispatch_Mode;
+      Hazard : Hazard_Class) return Boolean
+   is
+      Base_Compatible : Boolean;
+   begin
+      --  The matrix remains the first gate.  Hazard handling is a second,
+      --  deliberately small educational gate (not ADR/IATA compliance).
+      case Cargo is
+         when Silo_Cargo =>
+            case Mode is
+               when Road | Tunnel =>
+                  Base_Compatible := Equip = Silo;
+               when Rail | Sea =>
+                  Base_Compatible := True;
+               when Air | Space_Haul =>
+                  Base_Compatible := False;
+            end case;
+         when Tank_Cargo =>
+            --  Tank stock exists in every mode in this lean model, but air
+            -- and space only accept a non-DG tank product.
+            case Mode is
+               when Road | Tunnel =>
+                  Base_Compatible := Equip = Tank;
+               when Rail | Sea =>
+                  Base_Compatible := True;
+               when Air | Space_Haul =>
+                  Base_Compatible := Hazard = None;
+            end case;
+         when Lowboy_Cargo =>
+            case Mode is
+               when Road | Tunnel =>
+                  Base_Compatible := Equip = Lowboy;
+               when Rail | Sea =>
+                  Base_Compatible := True;
+               when Air | Space_Haul =>
+                  Base_Compatible := False;
+            end case;
+         when Reefer_Cargo =>
+            case Mode is
+               when Road | Tunnel =>
+                  Base_Compatible := Equip = Reefer;
+               when Rail | Sea | Air =>
+                  Base_Compatible := True;
+               when Space_Haul =>
+                  Base_Compatible := False;
+            end case;
+         when Flatbed_Cargo =>
+            case Mode is
+               when Road | Tunnel =>
+                  Base_Compatible := Equip = Flatbed;
+               when Rail | Sea | Air =>
+                  Base_Compatible := True;
+               when Space_Haul =>
+                  Base_Compatible := False;
+            end case;
+         when Container_Cargo =>
+            case Mode is
+               when Road | Tunnel =>
+                  Base_Compatible := Equip = Container;
+               when Rail | Air | Sea | Space_Haul =>
+                  Base_Compatible := True;
+            end case;
+         when Dry_Box_Cargo =>
+            case Mode is
+               when Road | Tunnel =>
+                  Base_Compatible := Equip = Dry_Box;
+               when Rail | Air | Sea =>
+                  Base_Compatible := True;
+               when Space_Haul =>
+                  Base_Compatible := False;
+            end case;
+      end case;
+
+      return Base_Compatible and then Mode_Allows_Hazard (Mode, Hazard);
+   end Compatible;
+
+   function Compatible
      (Cargo : Cargo_Class;
       Equip : Body_Kind;
       Mode  : Dispatch_Mode) return Boolean
    is
-      --  IRL-inspired matrix (educational, not legal/regulatory text).
-      --  Body_Kind is road equipment. On Rail/Sea/Air/Space_Haul a True
-      --  result means the *mode* can carry that cargo class with its own
-      --  specialized stock (hopper, tank car, flatcar, reefer box, ISO, …),
-      --  so Equip is not required to match the road body.
    begin
-      case Cargo is
-         when Silo_Cargo =>
-            --  Dry bulk: road silo/pneumatic; rail hopper; sea bulk; not air/space.
-            case Mode is
-               when Road | Tunnel =>
-                  return Equip = Silo;
-               when Rail | Sea =>
-                  return True;
-               when Air | Space_Haul =>
-                  return False;
-            end case;
-         when Tank_Cargo =>
-            --  Liquids/gases: road tank; rail tank car; sea tanker; not air/space (DG).
-            case Mode is
-               when Road | Tunnel =>
-                  return Equip = Tank;
-               when Rail | Sea =>
-                  return True;
-               when Air | Space_Haul =>
-                  return False;
-            end case;
-         when Lowboy_Cargo =>
-            --  Oversize / heavy plant: road lowboy/RGN; rail heavy flat/Schnabel;
-            --  sea RoRo / heavy-lift; not typical air or space.
-            case Mode is
-               when Road | Tunnel =>
-                  return Equip = Lowboy;
-               when Rail | Sea =>
-                  return True;
-               when Air | Space_Haul =>
-                  return False;
-            end case;
-         when Reefer_Cargo =>
-            --  Cold chain: road reefer; rail reefer; sea reefer containers;
-            --  air cool-cargo; not space.
-            case Mode is
-               when Road | Tunnel =>
-                  return Equip = Reefer;
-               when Rail | Sea | Air =>
-                  return True;
-               when Space_Haul =>
-                  return False;
-            end case;
-         when Flatbed_Cargo =>
-            --  Open deck / breakbulk: road flatbed; rail flatcar; sea breakbulk/RoRo;
-            --  air pallet/ULD; not space.
-            case Mode is
-               when Road | Tunnel =>
-                  return Equip = Flatbed;
-               when Rail | Sea | Air =>
-                  return True;
-               when Space_Haul =>
-                  return False;
-            end case;
-         when Container_Cargo =>
-            --  ISO / intermodal: all surface + air ULD + game Space_Haul.
-            case Mode is
-               when Road | Tunnel =>
-                  return Equip = Container;
-               when Rail | Air | Sea | Space_Haul =>
-                  return True;
-            end case;
-         when Dry_Box_Cargo =>
-            --  Enclosed dry van: road box; rail boxcar; sea (prefer container);
-            --  air cargo; not space.
-            case Mode is
-               when Road | Tunnel =>
-                  return Equip = Dry_Box;
-               when Rail | Air | Sea =>
-                  return True;
-               when Space_Haul =>
-                  return False;
-            end case;
-      end case;
+      return Compatible (Cargo, Equip, Mode, Hazard => None);
    end Compatible;
 
    function Van_Can_Carry (Cargo : Cargo_Class) return Boolean is
@@ -192,19 +193,29 @@ package body Logistics_Module is
    end M1_Last_Mile_Ok;
 
    function Compatible
-     (Kind  : Cargo_Kind;
-      Equip : Body_Kind;
-      Mode  : Dispatch_Mode) return Boolean
+     (Kind   : Cargo_Kind;
+      Equip  : Body_Kind;
+      Mode   : Dispatch_Mode;
+      Hazard : Hazard_Class) return Boolean
    is
    begin
       if not Allows_Body (Kind, Equip) then
          return False;
       end if;
-      -- Food_Dry may ride Container (class rules) or Dry_Box
+      -- Food_Dry may ride Container (class rules) or Dry_Box.
       if Kind = Food_Dry and then Equip = Container then
-         return Compatible (Container_Cargo, Container, Mode);
+         return Compatible (Container_Cargo, Container, Mode, Hazard);
       end if;
-      return Compatible (To_Cargo_Class (Kind), Equip, Mode);
+      return Compatible (To_Cargo_Class (Kind), Equip, Mode, Hazard);
+   end Compatible;
+
+   function Compatible
+     (Kind  : Cargo_Kind;
+      Equip : Body_Kind;
+      Mode  : Dispatch_Mode) return Boolean
+   is
+   begin
+      return Compatible (Kind, Equip, Mode, Hazard => None);
    end Compatible;
 
    function Vehicle_Cargo_Ok
@@ -1250,12 +1261,13 @@ package body Logistics_Module is
       return False;
    end Has_ADR_Driver;
 
-   function Cargo_Allows_Mode (Cargo : Cargo_Class; Mode : Dispatch_Mode)
+   function Cargo_Allows_Mode
+     (Cargo : Cargo_Class; Mode : Dispatch_Mode; Hazard : Hazard_Class)
      return Boolean
    is
    begin
       for B in Body_Kind loop
-         if Compatible (Cargo, B, Mode) then
+         if Compatible (Cargo, B, Mode, Hazard) then
             return True;
          end if;
       end loop;
@@ -1291,7 +1303,7 @@ package body Logistics_Module is
             end if;
          elsif V.Kind = Artic_Tractor and then not V.Has_Body then
             return False;
-         elsif not Compatible (O.Kind, Equip, Road) then
+         elsif not Compatible (O.Kind, Equip, Road, O.Hazard) then
             return False;
          end if;
       else
@@ -1303,12 +1315,12 @@ package body Logistics_Module is
                end if;
                Equip_Ok := Van_Can_Carry (O.Cargo);
             when Rigid =>
-               Equip_Ok := Compatible (O.Cargo, V.Attached_Body, Road);
+               Equip_Ok := Compatible (O.Cargo, V.Attached_Body, Road, O.Hazard);
             when Artic_Tractor =>
                if not V.Has_Body then
                   return False;
                end if;
-               Equip_Ok := Compatible (O.Cargo, V.Attached_Body, Road);
+               Equip_Ok := Compatible (O.Cargo, V.Attached_Body, Road, O.Hazard);
          end case;
          if not Equip_Ok then
             return False;
@@ -1385,7 +1397,7 @@ package body Logistics_Module is
             if not Rail_Slot_Reserved (C, O.Origin, O.Destination) then
                return;
             end if;
-            if not Cargo_Allows_Mode (O.Cargo, Rail) then
+            if not Cargo_Allows_Mode (O.Cargo, Rail, O.Hazard) then
                return;
             end if;
 
@@ -1393,7 +1405,7 @@ package body Logistics_Module is
             if not Orig.Has_Port or else not Dest.Has_Port then
                return;
             end if;
-            if not Cargo_Allows_Mode (O.Cargo, Sea) then
+            if not Cargo_Allows_Mode (O.Cargo, Sea, O.Hazard) then
                return;
             end if;
 
@@ -1401,7 +1413,7 @@ package body Logistics_Module is
             if not Orig.Has_Airport or else not Dest.Has_Airport then
                return;
             end if;
-            if not Cargo_Allows_Mode (O.Cargo, Air) then
+            if not Cargo_Allows_Mode (O.Cargo, Air, O.Hazard) then
                return;
             end if;
 
@@ -1416,7 +1428,7 @@ package body Logistics_Module is
             then
                return;
             end if;
-            if not Cargo_Allows_Mode (O.Cargo, Space_Haul) then
+            if not Cargo_Allows_Mode (O.Cargo, Space_Haul, O.Hazard) then
                return;
             end if;
 
@@ -1574,6 +1586,26 @@ package body Logistics_Module is
       end if;
       V := C.Vehicles (Vehicle);
       if not V.Available then
+         return;
+      end if;
+
+      -- Assignment uses the same educational hazard/matrix gates as
+      -- Dispatch_Order.  Haul_Mode is mapped to the public dispatch mode.
+      if not Mode_Allows_Hazard (Haul_To_Dispatch (Mode), O.Hazard) then
+         return;
+      end if;
+      if Mode in Road | Tunnel and then not V.Has_Body then
+         return;
+      end if;
+      if not Compatible
+        (O.Cargo, V.Attached_Body, Haul_To_Dispatch (Mode), O.Hazard)
+      then
+         return;
+      end if;
+      if Mode in Road | Tunnel
+        and then Requires_Tank_Body (O.Hazard)
+        and then V.Attached_Body /= Tank
+      then
          return;
       end if;
 

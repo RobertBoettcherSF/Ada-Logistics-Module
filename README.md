@@ -33,15 +33,17 @@ Full matrix (IRL-inspired): [Physical_Data.md](Physical_Data.md) § Cargo compat
 | Cargo | Road Equip | Rail | Sea | Air | Space |
 |-------|------------|------|-----|-----|-------|
 | Silo | Silo | ✓ | ✓ | ✗ | ✗ |
-| Tank | Tank | ✓ | ✓ | ✗ | ✗ |
+| Tank | Tank | ✓ | ✓ | ✓* | ✓* |
 | Lowboy | Lowboy | ✓ | ✓ | ✗ | ✗ |
 | Reefer | Reefer | ✓ | ✓ | ✓ | ✗ |
 | Flatbed | Flatbed | ✓ | ✓ | ✓ | ✗ |
 | Container | Container | ✓ | ✓ | ✓ | ✓ |
 | Dry_Box | Dry_Box | ✓ | ✓ | ✓ | ✗ |
 
-Tunnel uses the same Equip rule as Road. On non-road modes, Equip is ignored
-(mode owns specialized stock).
+`*` Tank on Air/Space_Haul is allowed only with `Hazard => None`; hazardous
+liquids/gases do not fly in this educational stub. Rail/Sea tank stock accepts
+all hazards permitted by `Mode_Allows_Hazard`. Tunnel uses the same Equip rule
+as Road. On non-road modes, Equip is ignored (mode owns specialized stock).
 
 ### Space_Haul ≅ Air
 
@@ -61,7 +63,8 @@ rules as `Road` (body / FE / ADR). Cities may set lean `Tunnel_Fire_Vent_Risk`.
   `Driver_Has_ADR_Cert`, and **Tank** body when `Requires_Tank_Body`
   (`Gases`, `Flammable_Liquids`).
 - **Air / Space_Haul** allow-list: **deny** `Explosives` and `Radioactive` by
-  default (`Mode_Allows_Hazard`).
+  default (`Mode_Allows_Hazard`); Tank cargo is additionally non-DG only.
+- This is thin, educational dangerous-goods wiring—not ADR or IATA compliance.
 
 ### Hazard insurance premiums
 

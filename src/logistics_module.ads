@@ -457,11 +457,23 @@ package Logistics_Module is
    --  Full IRL-inspired matrix: see Physical_Data.md § Cargo compatibility.
    --  Road|Tunnel: Equip must match the dedicated road body.
    --  Other modes: True means the *mode* can carry the class (specialized
-   --  stock); Equip is ignored. Space_Haul: Container only.
+   --  stock); Space_Haul: Container plus non-DG Tank in the hazard overload.
+   function Compatible
+     (Cargo  : Cargo_Class;
+      Equip  : Body_Kind;
+      Mode   : Dispatch_Mode;
+      Hazard : Hazard_Class) return Boolean;
+
    function Compatible
      (Cargo : Cargo_Class;
       Equip : Body_Kind;
       Mode  : Dispatch_Mode) return Boolean;
+
+   function Compatible
+     (Kind   : Cargo_Kind;
+      Equip  : Body_Kind;
+      Mode   : Dispatch_Mode;
+      Hazard : Hazard_Class) return Boolean;
 
    function Compatible
      (Kind  : Cargo_Kind;

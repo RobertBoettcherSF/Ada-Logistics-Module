@@ -331,6 +331,10 @@ package Logistics_Module.Demand_Cells is
      Pre => Distance_m > 0.0;
 
    function Under_Served (Cell : Demand_Cell) return Boolean;
+
+   --  Throughput / demand; zero when demand is not positive.  Over_Served
+   --  additionally requires stock to cover the cell horizon.
+   function Over_Supply_Ratio (Cell : Demand_Cell) return Float;
    function Over_Served (Cell : Demand_Cell) return Boolean;
 
    function ETA_s (Cell : Demand_Cell) return Float

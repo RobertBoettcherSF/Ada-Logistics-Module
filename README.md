@@ -211,6 +211,33 @@ mutation while measuring each candidate. It reports the first sustained
 `(Barge_Inner, Fast_Courier, Relativistic_Stub)` mix in lexicographic order;
 the market's 12-barge policy floor and pool cap are respected.
 
+### Five-agent barge supply scenarios
+
+`Logistics_Module.Supply_Agents` adds five explicit, competing agents in the
+same `Demand_Cell` and shared barge market. Each `Agent_Genes` record carries
+bounded educational strategy fields: `Bid_Aggressiveness`,
+`Prefer_Hold_Slots`, `Target_Oversupply_Ratio` (1.0..1.80),
+`Max_Barges_Willingness`, and `Wealth_Reserve_Fraction` (0.0..0.90).
+Agents 1--2 are undersupply/cap styles, 3--4 target controlled oversupply,
+and 5 is a mixed explorer. Whole-hull bids are the only way to add throughput;
+hold-slot bids fill available cargo capacity first for hold-preferring agents.
+
+* `Run_Limited_Barge_Agent` clamps ownership at `Barge_Cap` (default 100) and
+  reports mean `Undersupply_kg` plus the fraction of `Under_Served` ticks.
+* `Size_Min_Barges_Oversupply` sweeps operational N and accepts only a
+  sustained `Over_Served` cell with `Over_Supply_Ratio = Throughput /
+  Demand_Rate` in `[1.0, 1.80]`. `Sweep_Min_Barges` defaults to 1 because
+  `Barge_Pool_Min = 12` is the shared-market reserve policy, not a physical
+  requirement for this lens; pass 12 when the policy floor itself is the
+  constraint.
+
+`End_Generation` preserves the top two agents and gives the other three
+crossover/mutation offspring; `Agent_Death` respawns from the current best
+strategy. This carries genes across generations while the existing
+`Demand_Cells.End_Generation` carries market wealth. `make size` prints both
+scenarios at Crew=150 and 6000 ticks. The 6000-tick demo is quick; tests use
+short windows.
+
 ### MVP play loop
 
 1. List / seed jobs  2. Assign vehicle → `En_Route`, `ETA_s = Distance_m / Speed`

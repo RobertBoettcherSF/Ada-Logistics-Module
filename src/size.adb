@@ -1,10 +1,17 @@
 with Ada.Text_IO; use Ada.Text_IO;
 with Logistics_Module.Station_Sizing; use Logistics_Module.Station_Sizing;
+with Logistics_Module.Supply_Agents; use Logistics_Module.Supply_Agents;
 
 procedure Size is
    B, C, R : Natural;
    Deficit : Float;
    Good : Boolean;
+   Limited_Barges : Natural;
+   Limited_Undersupply : Float;
+   Limited_Under_Fraction : Float;
+   Oversupply_Barges : Natural;
+   Oversupply_Ratio : Float;
+   Oversupply_Ok : Boolean;
 begin
    Size_Station_Fleet
      (Min_Barges       => B,
@@ -24,4 +31,28 @@ begin
    Put_Line ("Minimum_Rel_Stubs=" & Natural'Image (R));
    Put_Line ("Final_Deficit_kg=" & Float'Image (Deficit));
    Put_Line ("Sustained=" & Boolean'Image (Good));
+
+   Run_Limited_Barge_Agent
+     (Crew           => 150,
+      N_Ticks        => 6000,
+      Barge_Cap      => 100,
+      Barges_Used    => Limited_Barges,
+      Undersupply_kg => Limited_Undersupply,
+      Under_Fraction => Limited_Under_Fraction);
+   Put_Line ("Scenario_1_Limited_Barges (cap=100)");
+   Put_Line ("Barges_Used=" & Natural'Image (Limited_Barges));
+   Put_Line ("Undersupply_kg_mean=" & Float'Image (Limited_Undersupply));
+   Put_Line ("Under_Fraction=" & Float'Image (Limited_Under_Fraction));
+
+   Size_Min_Barges_Oversupply
+     (Crew             => 150,
+      N_Ticks          => 6000,
+      Sweep_Min_Barges => 1,
+      Min_Barges       => Oversupply_Barges,
+      Achieved_Ratio   => Oversupply_Ratio,
+      Ok               => Oversupply_Ok);
+   Put_Line ("Scenario_2_Min_Barges_Oversupply (cap=1.80)");
+   Put_Line ("Min_Barges=" & Natural'Image (Oversupply_Barges));
+   Put_Line ("Achieved_Ratio=" & Float'Image (Oversupply_Ratio));
+   Put_Line ("Ok=" & Boolean'Image (Oversupply_Ok));
 end Size;

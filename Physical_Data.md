@@ -195,6 +195,45 @@ Pre: `Cruise_Speed_m_s < c_m_s`.
 Each tick appends `sim_run.csv`: comment `# run_id=…` then header
 `t_s,cell_id,…,beta,c_m_s`; one row per cell×species.
 
+### Explicit five-agent supply scenarios
+
+`Logistics_Module.Supply_Agents` runs exactly five strategy agents against one
+shared `Demand_Cell` and one shared `Barge_Market`. Their bounded genes are:
+
+| Gene | Educational bound/meaning |
+|---|---|
+| `Bid_Aggressiveness` | 0.0..1.0 multiplier above the current ask |
+| `Prefer_Hold_Slots` | book paid partial holds before seeking another hull |
+| `Target_Oversupply_Ratio` | 1.0..1.80 throughput/demand target |
+| `Max_Barges_Willingness` | per-agent hull cap |
+| `Wealth_Reserve_Fraction` | 0.0..0.90 of market wealth kept in reserve |
+
+Agents 1--2 use limited-undersupply styles, agents 3--4 use controlled
+oversupply styles, and agent 5 is a mixed explorer. `Run_Limited_Barge_Agent`
+uses the fixed `Barge_Cap` (normally `Barge_Pool_Max = 100`; 14 and 20 are
+useful demo caps), and minimises the run-average `Deficit_kg` while reporting
+`Under_Fraction`. `Size_Min_Barges_Oversupply` sweeps N and requires a
+sustained window (`Sustained_Window_Ticks = 100`, or the complete shorter
+run) with `Over_Served` and:
+
+```text
+Over_Supply_Ratio = Throughput_kg_s / Demand_Rate_kg_s
+1.0 <= Over_Supply_Ratio <= Oversupply_Cap   -- default 1.80 (+80%)
+```
+
+The sizing API's `Sweep_Min_Barges` default is one operational hull: the
+existing `Barge_Pool_Min = 12` is a market reserve floor, and at Crew=150
+forcing twelve active barges would exceed the +80% ratio. Callers that require
+the policy floor can pass `Sweep_Min_Barges => Barge_Pool_Min` and receive
+`Ok = False` when no bounded candidate exists. `Over_Served` means positive
+stock through the cell horizon, at least one ship, and ratio > 1.0.
+
+At generation end, the top two gene records are retained and three offspring
+are produced by deterministic light crossover/mutation. `Agent_Death` respawns
+from the current best genes. This is separate from the shared-market wealth
+inheritance in `Demand_Cells.End_Generation`; both strategy genes and wealth
+therefore survive a generation boundary.
+
 ## ATC corridors (lean SI, separate from Fitness)
 
 | Haul_Mode | Separation_m | Lane_Capacity |

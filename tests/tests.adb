@@ -9,6 +9,8 @@ with Logistics_Module; use Logistics_Module;
 with Logistics_Module.Demand_Cells;
 use Logistics_Module.Demand_Cells;
 with Logistics_Module.Station_Sizing;
+with Logistics_Module.Supply_Agents;
+use Logistics_Module.Supply_Agents;
 with Logistics_Module.Warehouses;
 use Logistics_Module.Warehouses;
 with Logistics_Module.ATC;
@@ -1550,6 +1552,51 @@ begin
                and then C <= Logistics_Module.Station_Sizing.Search_Max_Couriers
                and then R <= Logistics_Module.Station_Sizing.Search_Max_Rel_Stubs,
              "station sizing respects fleet pool/search limits");
+   end;
+
+   ------------------------------------------------------------------
+   -- Five competing supply agents: bounded hull and oversupply lenses
+   ------------------------------------------------------------------
+   declare
+      Population : Agent_Population;
+      Limited_Barges : Natural;
+      Mean_Deficit, Under_Fraction : Float;
+      Min_Over_Barges : Natural;
+      Achieved_Ratio : Float;
+      Over_Ok : Boolean;
+      Before_Target : Float;
+   begin
+      Initialize_Agents (Population);
+      Check (Population (1).Genes.Target_Oversupply_Ratio < 1.2
+               and then Population (4).Genes.Target_Oversupply_Ratio <= 1.8,
+             "five agents have bounded objective genes");
+      Population (1).Fitness := 10.0;
+      Population (2).Fitness := 9.0;
+      Before_Target := Population (3).Genes.Target_Oversupply_Ratio;
+      End_Generation (Population);
+      Check (Population (3).Genes.Target_Oversupply_Ratio >= 1.0
+               and then Population (3).Genes.Target_Oversupply_Ratio <= 1.8
+               and then Population (3).Genes.Target_Oversupply_Ratio /= Before_Target,
+             "generation end crosses and mutates strategy genes");
+      Run_Limited_Barge_Agent
+        (N_Ticks        => 8,
+         Barge_Cap      => 14,
+         Barges_Used    => Limited_Barges,
+         Undersupply_kg => Mean_Deficit,
+         Under_Fraction => Under_Fraction);
+      Check (Limited_Barges <= 14 and then Mean_Deficit >= 0.0
+               and then Under_Fraction >= 0.0 and then Under_Fraction <= 1.0,
+             "limited-barge agent obeys cap and reports deficit metrics");
+      Size_Min_Barges_Oversupply
+        (N_Ticks          => 8,
+         Sweep_Min_Barges => 1,
+         Min_Barges       => Min_Over_Barges,
+         Achieved_Ratio   => Achieved_Ratio,
+         Ok               => Over_Ok);
+      Check (Over_Ok and then Min_Over_Barges >= 1
+               and then Achieved_Ratio >= 1.0
+               and then Achieved_Ratio <= 1.80,
+             "oversupply sizing finds sustained ratio within +80 percent");
    end;
 
    New_Line;

@@ -609,11 +609,19 @@ package body Logistics_Module.Demand_Cells is
         and then Throughput_kg_s (Cell) < Cell.Demand_Rate_kg_s;
    end Under_Served;
 
+   function Over_Supply_Ratio (Cell : Demand_Cell) return Float is
+   begin
+      if Cell.Demand_Rate_kg_s <= 0.0 then
+         return 0.0;
+      end if;
+      return Throughput_kg_s (Cell) / Cell.Demand_Rate_kg_s;
+   end Over_Supply_Ratio;
+
    function Over_Served (Cell : Demand_Cell) return Boolean is
    begin
       return Deficit_kg (Cell) = 0.0
         and then Ship_Count (Cell) > 0
-        and then Throughput_kg_s (Cell) > Cell.Demand_Rate_kg_s;
+        and then Over_Supply_Ratio (Cell) > 1.0;
    end Over_Served;
 
    function ETA_s (Cell : Demand_Cell) return Float is

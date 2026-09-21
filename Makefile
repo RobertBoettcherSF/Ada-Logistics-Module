@@ -1,20 +1,18 @@
 GNATFLAGS = -gnatwa -gnat2022 -gnata
-GPR = logistics_module.gpr
 
 .PHONY: all test play clean
 
 all: test
 
-obj:
-	mkdir -p obj
+test:
+	mkdir -p obj bin
+	gnatmake $(GNATFLAGS) -D obj -Isrc tests/tests.adb -o bin/tests
+	./bin/tests
 
-test: obj
-	gprbuild -p -P $(GPR) $(GNATFLAGS)
-	./obj/tests
-
-play: obj
-	gprbuild -p -P $(GPR) $(GNATFLAGS)
-	./obj/play
+play:
+	mkdir -p obj bin
+	gnatmake $(GNATFLAGS) -D obj -Isrc src/play.adb -o bin/play
+	./bin/play
 
 clean:
-	rm -rf obj
+	rm -rf obj bin

@@ -115,12 +115,16 @@ On `Assign_On_Lane` / spawn: if `Fleet_In_Flight(lane) >= Lane_Capacity` → rej
 
 ## Build
 
+The repository follows the Ada-ADAMS layout: Ada library units are in `src/`,
+and the test main is in `tests/`. The Makefile is the primary build entry point.
+
 ```bash
-make test
+make test   # compile and run the test suite
 make play   # Text_IO MVP: jobs / assign / tick
+make clean  # remove generated obj/ and bin/ directories
 ```
 
-Flags: `-gnatwa -gnat2022 -gnata`. Mains: `tests.adb`, `play.adb`.
+The test and play builds use `-gnatwa -gnat2022 -gnata`.
 
 ### MVP play loop
 

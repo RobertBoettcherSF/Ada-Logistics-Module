@@ -66,11 +66,22 @@ procedure Play is
       Stock_kg         => 0.0,
       Horizon_s        => 86_400.0,
       Distance_m       => AU_m,
-      Fleet            => [Barge_Inner => 1, others => 0],
+      Fleet            => [Barge_Inner => 0, others => 0],
       Preferred        => Barge_Inner,
       Cell_Id          => 1);
    Demo_T_s : Float := 0.0;
    Demo_Tournament : Tournament_State;
+
+   procedure Seed_Evolution is
+   begin
+      -- One shared market funds the initial generational fleet.  With the
+      -- default demo budget this reaches the policy floor of twelve barges.
+      Seed_Cell_With_Barge_Market (Demo_Cell);
+      while Current_Barge_Market.Pool_Owned < Barge_Pool_Min loop
+         exit when not Bid_For_Barge
+           (Demo_Cell, Current_Barge_Market.Ask_Price);
+      end loop;
+   end Seed_Evolution;
 
    procedure Show_Evo is
       Dist : constant Float := Demo_Cell.Distance_m;
@@ -82,6 +93,11 @@ procedure Play is
       Put_Line ("  thr=" & Throughput_kg_s (Demo_Cell)'Image
                 & " kg/s  ships=" & Ship_Count (Demo_Cell)'Image
                 & " pref=" & Demo_Cell.Preferred'Image);
+      Put_Line ("  barge market owned="
+                & Current_Barge_Market.Pool_Owned'Image
+                & " available=" & Current_Barge_Market.Pool_Available'Image
+                & " wealth=" & Current_Barge_Market.Wealth'Image
+                & " generation=" & Current_Barge_Market.Generation'Image);
       for S in Fleet_Species loop
          Put ("  " & S'Image
               & " n=" & Demo_Cell.Fleet (S)'Image
@@ -160,6 +176,7 @@ procedure Play is
 
 begin
    Seed;
+   Seed_Evolution;
    Put_Line ("Ada Logistics MVP — [j]obs [a]ssign [t]/Enter tick [r]ate [s]paceports [e]vo [u]ourney [q]uit");
    Put_Line ("Time_Rate default demo 60.0 (wall*rate → sim seconds)");
    Show_Jobs;

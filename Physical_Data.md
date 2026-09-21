@@ -142,6 +142,18 @@ IDs, non-positive moves, over-capacity deposits, and full slot sets.
 | AU_m | ≈1.495978707×10¹¹ |
 | Max_Beta | 0.01 (relativistic stub) |
 
+### Barge market and generational wealth
+
+`Barge_Pool_Max = 100` and `Barge_Pool_Min = 12` bound the shared pool;
+`Barge_Unit_Price = 50,000` and `Initial_Barge_Budget = 1,000,000` are
+educational demo coins, not SI money or `Company` cash. `Bid_For_Barge` is the
+only `Life_Tick` path that adds a `Barge_Inner`: it rejects bids below the ask,
+when poor, or when the pool is exhausted, then moves one barge from available
+to owned and charges `Wealth`. `Clamp_Barge_Pool` enforces the 0..100 owned
+bound. `End_Generation` increments `Generation` and passes remaining wealth
+through `Inherited` to the next generation; owned barges remain family assets.
+
+
 | Species | Cruise m/s | Cargo kg | Gross kg |
 |---------|------------|----------|----------|
 | Barge_Inner | 3000 | 1_045_000 | 1_900_000 |

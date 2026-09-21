@@ -14,6 +14,91 @@ package body Logistics_Module.Demand_Cells is
    Run_Open : Boolean := False;
    Run_Path : String (1 .. 256) := [others => ' '];
    Run_Len  : Natural := 0;
+   Shared_Barge_Market : Barge_Market :=
+     (Pool_Available => Barge_Pool_Max,
+      Pool_Owned     => 0,
+      Ask_Price      => Barge_Unit_Price,
+      Generation     => 0,
+      Wealth         => Initial_Barge_Budget,
+      Inherited      => 0.0);
+
+   function Init_Barge_Market return Barge_Market is
+   begin
+      return
+        (Pool_Available => Barge_Pool_Max,
+         Pool_Owned     => 0,
+         Ask_Price      => Barge_Unit_Price,
+         Generation     => 0,
+         Wealth         => Initial_Barge_Budget,
+         Inherited      => 0.0);
+   end Init_Barge_Market;
+
+   procedure Init_Barge_Market (Market : out Barge_Market) is
+   begin
+      Market := Init_Barge_Market;
+   end Init_Barge_Market;
+
+   function Current_Barge_Market return Barge_Market is
+   begin
+      return Shared_Barge_Market;
+   end Current_Barge_Market;
+
+   procedure Clamp_Barge_Pool (Market : in out Barge_Market) is
+      Max_Available : Natural;
+   begin
+      if Market.Pool_Owned > Barge_Pool_Max then
+         Market.Pool_Owned := Barge_Pool_Max;
+      end if;
+      Max_Available := Barge_Pool_Max - Market.Pool_Owned;
+      if Market.Pool_Available > Max_Available then
+         Market.Pool_Available := Max_Available;
+      end if;
+      if Market.Ask_Price <= 0.0 then
+         Market.Ask_Price := Barge_Unit_Price;
+      end if;
+      if Market.Wealth < 0.0 then
+         Market.Wealth := 0.0;
+      end if;
+      if Market.Inherited < 0.0 then
+         Market.Inherited := 0.0;
+      end if;
+   end Clamp_Barge_Pool;
+
+   function Bid_For_Barge
+     (Market     : in out Barge_Market;
+      Bid_Amount : Float) return Boolean
+   is
+   begin
+      Clamp_Barge_Pool (Market);
+      if Market.Pool_Owned >= Barge_Pool_Max
+        or else Market.Pool_Available = 0
+        or else Bid_Amount < Market.Ask_Price
+        or else Bid_Amount > Market.Wealth
+        or else Bid_Amount <= 0.0
+      then
+         return False;
+      end if;
+
+      Market.Wealth := Market.Wealth - Bid_Amount;
+      Market.Pool_Owned := Market.Pool_Owned + 1;
+      Market.Pool_Available := Market.Pool_Available - 1;
+      -- A successful bid makes the next barge one percent dearer.  This is
+      -- intentionally a small educational market signal, not a currency API.
+      Market.Ask_Price := Market.Ask_Price * 1.01;
+      Clamp_Barge_Pool (Market);
+      return True;
+   end Bid_For_Barge;
+
+   procedure End_Generation (Market : in out Barge_Market) is
+   begin
+      Clamp_Barge_Pool (Market);
+      -- Demo coins are inherited in full; barges remain owned by the family.
+      Market.Inherited := Market.Wealth;
+      Market.Wealth := Market.Inherited;
+      if Market.Generation < Generation_Id'Last then
+         Market.Generation := Market.Generation + 1;
+      end if;
+   end End_Generation;
 
    function Profile_Of (S : Fleet_Species) return Species_Profile is
    begin
@@ -91,6 +176,91 @@ package body Logistics_Module.Demand_Cells is
    begin
       return Demand_Rate_kg_s * 2.0 * Distance_m / Cargo_Mass_kg;
    end Min_Cruise_Speed_m_s;
+
+   function Barge_Market_Of (Cell : Demand_Cell) return Barge_Market is
+      pragma Unreferenced (Cell);
+   begin
+      return Shared_Barge_Market;
+   end Barge_Market_Of;
+
+   procedure Seed_Cell_With_Barge_Market
+     (Cell : in out Demand_Cell)
+   is
+      pragma Unreferenced (Cell);
+   begin
+      Shared_Barge_Market := Init_Barge_Market;
+   end Seed_Cell_With_Barge_Market;
+
+   procedure Seed_Cell_With_Barge_Market
+     (Cell   : in out Demand_Cell;
+      Market : Barge_Market)
+   is
+      pragma Unreferenced (Cell);
+   begin
+      Shared_Barge_Market := Market;
+      Clamp_Barge_Pool (Shared_Barge_Market);
+   end Seed_Cell_With_Barge_Market;
+
+   procedure Try_Barge_Bid (Cell : in out Demand_Cell);
+
+   procedure Clamp_Barge_Pool (Cell : in out Demand_Cell) is
+   begin
+      Clamp_Barge_Pool (Shared_Barge_Market);
+      -- Under-served demand tries to establish the policy floor, but every
+      -- unit still goes through the normal ask/wealth/pool checks.
+      if Cell.Distance_m > 0.0 and then Under_Served (Cell) then
+         while Shared_Barge_Market.Pool_Owned < Barge_Pool_Min
+           and then Shared_Barge_Market.Pool_Available > 0
+           and then Shared_Barge_Market.Wealth >= Shared_Barge_Market.Ask_Price
+         loop
+            Try_Barge_Bid (Cell);
+         end loop;
+      end if;
+   end Clamp_Barge_Pool;
+
+   function Bid_For_Barge
+     (Cell       : in out Demand_Cell;
+      Bid_Amount : Float) return Boolean
+   is
+   begin
+      if Bid_For_Barge (Shared_Barge_Market, Bid_Amount) then
+         Cell.Fleet (Barge_Inner) := Cell.Fleet (Barge_Inner) + 1;
+         return True;
+      end if;
+      return False;
+   end Bid_For_Barge;
+
+   procedure Bid_For_Barge
+     (Market     : in out Barge_Market;
+      Bid_Amount : Float;
+      Success    : out Boolean)
+   is
+   begin
+      Success := Bid_For_Barge (Market, Bid_Amount);
+   end Bid_For_Barge;
+
+   procedure Bid_For_Barge
+     (Cell       : in out Demand_Cell;
+      Bid_Amount : Float;
+      Success    : out Boolean)
+   is
+   begin
+      Success := Bid_For_Barge (Cell, Bid_Amount);
+   end Bid_For_Barge;
+
+   procedure Try_Barge_Bid (Cell : in out Demand_Cell) is
+   begin
+      if Bid_For_Barge (Cell, Shared_Barge_Market.Ask_Price) then
+         null;
+      end if;
+   end Try_Barge_Bid;
+
+   procedure End_Generation (Cell : in out Demand_Cell) is
+   begin
+      On_Demand_Death (Cell);
+      End_Generation (Shared_Barge_Market);
+      On_Demand_Birth (Cell);
+   end End_Generation;
 
    function Ship_Count (Cell : Demand_Cell) return Natural is
       N : Natural := 0;
@@ -482,14 +652,35 @@ package body Logistics_Module.Demand_Cells is
    begin
       Tick_Cell (Cell, Delta_s);
       if Cell.Distance_m > 0.0 then
+         Clamp_Barge_Pool (Cell);
          if Under_Served (Cell) then
             Best := Best_Species (Cell.Distance_m);
             Cell.Preferred := Best;
-            Cell.Fleet (Best) := Cell.Fleet (Best) + 1;
+            if Best = Barge_Inner then
+               -- Barges are scarce capital: only a successful market bid may
+               -- add one.  Other species keep the old educational spawn path.
+               Try_Barge_Bid (Cell);
+            else
+               Cell.Fleet (Best) := Cell.Fleet (Best) + 1;
+            end if;
          elsif Over_Served (Cell) then
             Worst := Worst_Present (Cell);
             if Cell.Fleet (Worst) > 0 then
                Cell.Fleet (Worst) := Cell.Fleet (Worst) - 1;
+               if Worst = Barge_Inner then
+                  if Shared_Barge_Market.Pool_Owned > 0 then
+                     Shared_Barge_Market.Pool_Owned := Shared_Barge_Market.Pool_Owned - 1;
+                     if Shared_Barge_Market.Pool_Available < Barge_Pool_Max then
+                        Shared_Barge_Market.Pool_Available :=
+                          Shared_Barge_Market.Pool_Available + 1;
+                     end if;
+                     -- A sale/cull returns half the current ask to the
+                     -- generation treasury, preserving a useful sink.
+                     Shared_Barge_Market.Wealth := Shared_Barge_Market.Wealth
+                       + 0.5 * Shared_Barge_Market.Ask_Price;
+                     Clamp_Barge_Pool (Cell);
+                  end if;
+               end if;
             end if;
          end if;
       end if;
@@ -574,14 +765,31 @@ package body Logistics_Module.Demand_Cells is
 
          Tick_Cell (Cell, Delta_s);
          if Cell.Distance_m > 0.0 then
+            Clamp_Barge_Pool (Cell);
             if Under_Served (Cell) then
-               -- Bias spawn to max Score/Reward winners (Fitness formula untouched)
+               -- Bias spawn to max Score/Reward winners (Fitness formula untouched).
                Cell.Preferred := W;
-               Cell.Fleet (W) := Cell.Fleet (W) + 1;
+               if W = Barge_Inner then
+                  Try_Barge_Bid (Cell);
+               else
+                  Cell.Fleet (W) := Cell.Fleet (W) + 1;
+               end if;
             elsif Over_Served (Cell) then
                Worst := Worst_Present (Cell);
                if Cell.Fleet (Worst) > 0 then
                   Cell.Fleet (Worst) := Cell.Fleet (Worst) - 1;
+                  if Worst = Barge_Inner
+                    and then Shared_Barge_Market.Pool_Owned > 0
+                  then
+                     Shared_Barge_Market.Pool_Owned := Shared_Barge_Market.Pool_Owned - 1;
+                     if Shared_Barge_Market.Pool_Available < Barge_Pool_Max then
+                        Shared_Barge_Market.Pool_Available :=
+                          Shared_Barge_Market.Pool_Available + 1;
+                     end if;
+                     Shared_Barge_Market.Wealth := Shared_Barge_Market.Wealth
+                       + 0.5 * Shared_Barge_Market.Ask_Price;
+                     Clamp_Barge_Pool (Cell);
+                  end if;
                end if;
             end if;
          end if;

@@ -117,6 +117,15 @@ Evolutionary fleet (DS SI): `c_m_s`, `AU_m`; species `Barge_Inner` /
 `Fast_Courier` / `Relativistic_Stub` (β≤0.01); cruise &lt; c; Fitness =
 Throughput/(ships×gross); `Life_Tick` spawn/prefer/cull by Fitness; appends `sim_run.csv` (cell×species SI rows).
 
+Barges use a shared `Barge_Market` (educational demo coins, separate from
+`Company` money): the pool is capped at 100 with a policy floor of 12,
+`Initial_Barge_Budget` is 1,000,000 coins, and each barge must clear the
+current `Ask_Price`. `Bid_For_Barge` transfers wealth into ownership and the
+fleet; a cull returns the barge to the available pool. `End_Generation`
+increments `Generation` and passes all remaining `Wealth` through `Inherited`.
+Call `Seed_Cell_With_Barge_Market` for a fresh global market; `play` seeds the
+initial evolution fleet toward the 12-barge floor when its budget permits.
+
 ### Warehouse + Stock (child package)
 
 `Logistics_Module.Warehouses` is a bounded educational hub inventory. A

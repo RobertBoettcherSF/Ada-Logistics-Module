@@ -175,6 +175,43 @@ package Logistics_Module.Demand_Cells is
    type Species_Counts is array (Fleet_Species) of Natural;
 
    ------------------------------------------------------------------
+   -- Barge ownership market (educational demo coins, not Company money)
+   ------------------------------------------------------------------
+   Barge_Pool_Min    : constant Natural := 12;
+   Barge_Pool_Max    : constant Natural := 100;
+   Barge_Unit_Price  : constant Float := 50_000.0;
+   Initial_Barge_Budget : constant Float := 1_000_000.0;
+
+   type Generation_Id is new Natural;
+
+   type Barge_Market is record
+      Pool_Available : Natural := Barge_Pool_Max;
+      Pool_Owned     : Natural := 0;
+      Ask_Price      : Float := Barge_Unit_Price;
+      Generation     : Generation_Id := 0;
+      Wealth         : Float := Initial_Barge_Budget;
+      Inherited      : Float := 0.0;
+   end record;
+
+   function Init_Barge_Market return Barge_Market;
+   procedure Init_Barge_Market (Market : out Barge_Market);
+
+   -- Demand cells share this one market, so old cell aggregates remain valid.
+   function Current_Barge_Market return Barge_Market;
+
+   procedure Clamp_Barge_Pool (Market : in out Barge_Market);
+
+   function Bid_For_Barge
+     (Market     : in out Barge_Market;
+      Bid_Amount : Float) return Boolean;
+   procedure Bid_For_Barge
+     (Market     : in out Barge_Market;
+      Bid_Amount : Float;
+      Success    : out Boolean);
+
+   procedure End_Generation (Market : in out Barge_Market);
+
+   ------------------------------------------------------------------
    -- Per-cell demand / stock / evolutionary fleet
    ------------------------------------------------------------------
    type Demand_Cell is record
@@ -186,6 +223,28 @@ package Logistics_Module.Demand_Cells is
       Preferred        : Fleet_Species := Barge_Inner;
       Cell_Id          : Natural := 1;
    end record;
+
+   -- A cell normally owns one market.  The market overload is useful for
+   -- tournament/evolution seeds that share a global market explicitly.
+   function Barge_Market_Of (Cell : Demand_Cell) return Barge_Market;
+
+   procedure Seed_Cell_With_Barge_Market
+     (Cell : in out Demand_Cell);
+   procedure Seed_Cell_With_Barge_Market
+     (Cell   : in out Demand_Cell;
+      Market : Barge_Market);
+
+   procedure Clamp_Barge_Pool (Cell : in out Demand_Cell);
+
+   function Bid_For_Barge
+     (Cell       : in out Demand_Cell;
+      Bid_Amount : Float) return Boolean;
+   procedure Bid_For_Barge
+     (Cell       : in out Demand_Cell;
+      Bid_Amount : Float;
+      Success    : out Boolean);
+
+   procedure End_Generation (Cell : in out Demand_Cell);
 
    function Ship_Count (Cell : Demand_Cell) return Natural;
    function Ship_Count

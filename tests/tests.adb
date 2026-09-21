@@ -861,6 +861,8 @@ begin
       Check (Cell.Preferred = Best_Species (Dist),
              "Life_Tick prefers best fitness species");
       Check (Cell.Fleet (Cell.Preferred) = 1, "Life_Tick spawns one");
+      Check (Current_Barge_Market.Pool_Owned >= Barge_Pool_Min,
+             "Life_Tick starts toward minimum barge pool");
 
       -- sim_run.csv: Begin + Life_Tick append (3 species rows each)
       declare
@@ -1405,6 +1407,74 @@ begin
                and then Cargo_Capacity_kg (Fast_Courier, Mars)
                  < Cargo_Capacity_kg (Barge_Inner, Mars),
              "Fast_Courier long-haul cost and payload table");
+   end;
+
+   ------------------------------------------------------------------
+   -- Barge market: bounded ownership, bids, inheritance, Life_Tick gate
+   ------------------------------------------------------------------
+   declare
+      Market : Barge_Market := Init_Barge_Market;
+      Poor   : Barge_Market :=
+        (Pool_Available => Barge_Pool_Max,
+         Pool_Owned     => 0,
+         Ask_Price      => Barge_Unit_Price,
+         Generation     => 0,
+         Wealth         => 0.0,
+         Inherited      => 0.0);
+      Cell   : Demand_Cell :=
+        (Demand_Rate_kg_s => 1.0,
+         Stock_kg         => 0.0,
+         Horizon_s        => 1_000.0,
+         Distance_m       => 1.0e6,
+         Fleet            => [others => 0],
+         Preferred        => Barge_Inner,
+         Cell_Id          => 99);
+      Old_Wealth : Float;
+   begin
+      pragma Warnings (Off, "condition is always True");
+      Check (Barge_Pool_Min = 12 and then Barge_Pool_Max = 100,
+             "barge pool policy bounds");
+      pragma Warnings (On, "condition is always True");
+      Check (Market.Pool_Available = Barge_Pool_Max
+               and then Market.Pool_Owned = 0
+               and then Market.Wealth = Initial_Barge_Budget,
+             "barge market initializes available and budget");
+      Check (not Bid_For_Barge (Market, Barge_Unit_Price - 1.0),
+             "barge bid below ask rejected");
+      Check (Bid_For_Barge (Market, Market.Ask_Price),
+             "barge bid succeeds at ask");
+      Check (Market.Pool_Owned = 1 and then Market.Pool_Available = 99,
+             "barge bid moves pool to owned");
+      Check (Market.Wealth < Initial_Barge_Budget,
+             "barge bid charges generation wealth");
+
+      Market.Pool_Owned := Barge_Pool_Max + 5;
+      Market.Pool_Available := Barge_Pool_Max;
+      Clamp_Barge_Pool (Market);
+      Check (Market.Pool_Owned <= Barge_Pool_Max
+               and then Market.Pool_Owned + Market.Pool_Available
+                 <= Barge_Pool_Max,
+             "barge pool clamps ownership to maximum");
+
+      Old_Wealth := Market.Wealth;
+      Market.Generation := 4;
+      End_Generation (Market);
+      Check (Market.Generation = 5 and then Market.Inherited = Old_Wealth
+               and then Market.Wealth = Old_Wealth,
+             "generation end passes remaining wealth");
+
+      Check (not Bid_For_Barge (Poor, Barge_Unit_Price),
+             "poor generation cannot bid for barge");
+      Seed_Cell_With_Barge_Market (Cell, Poor);
+      Life_Tick (Cell, 0.0, Log => False);
+      Check (Cell.Fleet (Barge_Inner) = 0
+               and then Current_Barge_Market.Pool_Owned = 0,
+             "Life_Tick never free-spawns a barge");
+      Seed_Cell_With_Barge_Market (Cell);
+      Check (Bid_For_Barge (Cell, Current_Barge_Market.Ask_Price)
+               and then Cell.Fleet (Barge_Inner) = 1
+               and then Current_Barge_Market.Pool_Owned = 1,
+             "cell barge bid adds owned fleet unit");
    end;
 
    New_Line;

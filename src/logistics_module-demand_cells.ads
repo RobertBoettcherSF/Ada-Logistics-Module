@@ -178,7 +178,7 @@ package Logistics_Module.Demand_Cells is
    -- Barge ownership market (educational demo coins, not Company money)
    ------------------------------------------------------------------
    Barge_Pool_Min    : constant Natural := 12;
-   Barge_Pool_Max    : constant Natural := 100;
+   Barge_Pool_Max    : constant Natural := 1000;
    Barge_Unit_Price  : constant Float := 50_000.0;
    Initial_Barge_Budget : constant Float := 1_000_000.0;
 

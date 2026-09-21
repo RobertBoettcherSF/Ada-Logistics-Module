@@ -144,7 +144,7 @@ IDs, non-positive moves, over-capacity deposits, and full slot sets.
 
 ### Barge market and generational wealth
 
-`Barge_Pool_Max = 100` and `Barge_Pool_Min = 12` bound the shared pool;
+`Barge_Pool_Max = 1000` and `Barge_Pool_Min = 12` bound the shared pool;
 `Barge_Unit_Price = 50,000` and `Initial_Barge_Budget = 1,000,000` are
 educational demo coins, not SI money or `Company` cash. `Bid_For_Barge` is the
 only `Life_Tick` path that adds a `Barge_Inner`: it rejects bids below the ask,
@@ -210,7 +210,7 @@ shared `Demand_Cell` and one shared `Barge_Market`. Their bounded genes are:
 
 Agents 1--2 use limited-undersupply styles, agents 3--4 use controlled
 oversupply styles, and agent 5 is a mixed explorer. `Run_Limited_Barge_Agent`
-uses the fixed `Barge_Cap` (normally `Barge_Pool_Max = 100`; 14 and 20 are
+uses the fixed `Barge_Cap` (normally `Barge_Pool_Max = 1000`; 14 and 20 are
 useful demo caps), and minimises the run-average `Deficit_kg` while reporting
 `Under_Fraction`. `Size_Min_Barges_Oversupply` sweeps N and requires a
 sustained window (`Sustained_Window_Ticks = 100`, or the complete shorter

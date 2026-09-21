@@ -1442,7 +1442,7 @@ begin
       Slot_Wealth : Float;
    begin
       pragma Warnings (Off, "condition is always True");
-      Check (Barge_Pool_Min = 12 and then Barge_Pool_Max = 100,
+      Check (Barge_Pool_Min = 12 and then Barge_Pool_Max = 1000,
              "barge pool policy bounds");
       pragma Warnings (On, "condition is always True");
       Check (Market.Pool_Available = Barge_Pool_Max
@@ -1453,7 +1453,7 @@ begin
              "barge bid below ask rejected");
       Check (Bid_For_Barge (Market, Market.Ask_Price),
              "barge bid succeeds at ask");
-      Check (Market.Pool_Owned = 1 and then Market.Pool_Available = 99,
+      Check (Market.Pool_Owned = 1 and then Market.Pool_Available = Barge_Pool_Max - 1,
              "barge bid moves pool to owned");
       Check (Market.Wealth < Initial_Barge_Budget,
              "barge bid charges generation wealth");

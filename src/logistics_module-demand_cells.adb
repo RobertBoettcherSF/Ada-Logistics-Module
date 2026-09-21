@@ -922,10 +922,23 @@ package body Logistics_Module.Demand_Cells is
                -- Bias spawn to max Score/Reward winners (Fitness formula untouched).
                Cell.Preferred := W;
                if not Try_Hold_Bid (Cell) then
-                  if W = Barge_Inner then
-                     Try_Barge_Bid (Cell);
+                  if Shared_Barge_Market.Pool_Owned < Barge_Pool_Max then
+                     if W = Barge_Inner then
+                        Try_Barge_Bid (Cell);
+                     else
+                        Cell.Fleet (W) := Cell.Fleet (W) + 1;
+                     end if;
                   else
-                     Cell.Fleet (W) := Cell.Fleet (W) + 1;
+                     -- Barge pool exhausted: escalate to faster classes so
+                     -- long runs keep changing the mix while still under-served.
+                     if W = Barge_Inner or else W = Fast_Courier then
+                        Cell.Fleet (Fast_Courier) :=
+                          Cell.Fleet (Fast_Courier) + 1;
+                        Cell.Preferred := Fast_Courier;
+                     else
+                        Cell.Fleet (W) := Cell.Fleet (W) + 1;
+                        Cell.Preferred := W;
+                     end if;
                   end if;
                end if;
             elsif Over_Served (Cell) then

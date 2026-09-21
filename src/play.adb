@@ -99,7 +99,17 @@ procedure Play is
                 & " wealth=" & Current_Barge_Market.Wealth'Image
                 & " ask=" & Current_Barge_Market.Ask_Price'Image
                 & " generation=" & Current_Barge_Market.Generation'Image);
-      if Current_Barge_Market.Wealth < Current_Barge_Market.Ask_Price
+      Put_Line ("  hold booked="
+                & Current_Barge_Market.Hold_Booked_kg'Image
+                & " kg remaining="
+                & Remaining_Hold_kg (Current_Barge_Market)'Image
+                & " kg");
+      if Current_Barge_Market.Pool_Available = 0
+        and then Under_Served (Demo_Cell)
+      then
+         Put_Line
+           ("  note: barge pool maxed — further ticks escalate to couriers/stubs");
+      elsif Current_Barge_Market.Wealth < Current_Barge_Market.Ask_Price
         and then Under_Served (Demo_Cell)
       then
          Put_Line

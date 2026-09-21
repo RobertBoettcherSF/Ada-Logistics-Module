@@ -118,7 +118,7 @@ Evolutionary fleet (DS SI): `c_m_s`, `AU_m`; species `Barge_Inner` /
 Throughput/(ships×gross); `Life_Tick` spawn/prefer/cull by Fitness; appends `sim_run.csv` (cell×species SI rows).
 
 Barges use a shared `Barge_Market` (educational demo coins, separate from
-`Company` money): the pool is capped at 100 with a policy floor of 12,
+`Company` money): the pool is capped at 1000 with a policy floor of 12,
 `Initial_Barge_Budget` is 1,000,000 coins, and each barge must clear the
 current `Ask_Price`. `Bid_For_Barge` is the whole-vessel path: it transfers wealth into ownership
 and the fleet; a cull returns the barge to the available pool. Owned hulls also

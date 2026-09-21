@@ -179,6 +179,7 @@ begin
    Seed_Evolution;
    Put_Line ("Ada Logistics MVP — [j]obs [a]ssign [t]/Enter tick [r]ate [s]paceports [e]vo [u]ourney [q]uit");
    Put_Line ("Time_Rate default demo 60.0 (wall*rate → sim seconds)");
+   Put_Line ("Tournament: u [N]  e.g. u 6000  (default N=5; station sizing: make size)");
    Show_Jobs;
 
    loop
@@ -213,15 +214,35 @@ begin
                Time_Rate => Time_Rate_Of (C));
             Show_Evo;
          when 'u' | 'U' =>
-            -- Optional tournament: N ticks, Score_kg_s / Reward_Coin
-            Run_Tournament_Ticks
-              (Demo_Cell, Demo_Tournament, N_Ticks => 5, Delta_s => 3600.0,
-               T0_s => Demo_T_s, Time_Rate => Time_Rate_Of (C));
-            Demo_T_s := Demo_T_s + 5.0 * 3600.0;
-            Put_Line ("tournament 5 ticks winner="
-                      & Tournament_Winner
-                          (Demo_Tournament, Demo_Cell.Distance_m)'Image);
-            Show_Evo;
+            -- Tournament: optional N after command, e.g. "u 6000" (default 5)
+            declare
+               N     : Positive := 5;
+               Rest  : constant String :=
+                 (if Last >= 2 then Ada.Strings.Fixed.Trim
+                    (Line (2 .. Last), Ada.Strings.Both)
+                  else "");
+            begin
+               if Rest'Length > 0 then
+                  begin
+                     N := Positive'Value (Rest);
+                     if N > 20_000 then
+                        N := 20_000;  -- safety cap for interactive play
+                     end if;
+                  exception
+                     when others =>
+                        Put_Line ("bad tick count; using 5");
+                        N := 5;
+                  end;
+               end if;
+               Run_Tournament_Ticks
+                 (Demo_Cell, Demo_Tournament, N_Ticks => N, Delta_s => 3600.0,
+                  T0_s => Demo_T_s, Time_Rate => Time_Rate_Of (C));
+               Demo_T_s := Demo_T_s + Float (N) * 3600.0;
+               Put_Line ("tournament" & N'Image & " ticks winner="
+                         & Tournament_Winner
+                             (Demo_Tournament, Demo_Cell.Distance_m)'Image);
+               Show_Evo;
+            end;
          when 'r' | 'R' =>
             declare
                Rraw : String (1 .. 20);

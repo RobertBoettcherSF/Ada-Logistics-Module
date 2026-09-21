@@ -186,11 +186,45 @@ begin
       Put ("> ");
       Get_Line (Line, Last);
       Tick (C);  -- auto-tick on each key / line
-      if Last = 0 then
-         Cmd := 't';
-      else
-         Cmd := Line (1);
-      end if;
+      declare
+         Raw : constant String :=
+           (if Last = 0 then ""
+            else Ada.Strings.Fixed.Trim
+              (Line (1 .. Last), Ada.Strings.Both));
+         Word_Cmd : Boolean := False;
+      begin
+         declare
+            Low : String := Raw;
+         begin
+            for I in Low'Range loop
+               if Low (I) in 'A' .. 'Z' then
+                  Low (I) := Character'Val
+                    (Character'Pos (Low (I))
+                       - Character'Pos ('A')
+                       + Character'Pos ('a'));
+               end if;
+            end loop;
+            if Low = "exit" or else Low = "quit" then
+               Put_Line ("bye");
+               exit;
+            elsif Low = "help" or else Low = "?" then
+               Put_Line
+                 ("Commands: j jobs | a assign | t/Enter tick | r rate | "
+                  & "s spaceports | e evo | u [N] tournament | "
+                  & "q / exit / quit | help");
+               Word_Cmd := True;
+            elsif Low = "clear" then
+               Show_Jobs;
+               Word_Cmd := True;
+            end if;
+         end;
+
+         if not Word_Cmd then
+            if Last = 0 then
+               Cmd := 't';
+            else
+               Cmd := Line (1);
+            end if;
 
       case Cmd is
          when 'j' | 'J' =>
@@ -265,7 +299,10 @@ begin
             Put_Line ("bye");
             exit;
          when others =>
+            Put_Line ("unknown command (help for list)");
             Show_Jobs;
       end case;
+         end if;
+      end;
    end loop;
 end Play;

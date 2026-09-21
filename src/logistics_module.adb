@@ -34,6 +34,9 @@ package body Logistics_Module is
                   return False;
             end case;
          when Lowboy_Cargo =>
+            --  Oversize / heavy plant: road needs a lowboy trailer;
+            --  rail/sea accept the cargo regardless of road body;
+            --  air / space haul refuse it.
             case Mode is
                when Road | Tunnel =>
                   return Equip = Lowboy;

@@ -452,6 +452,11 @@ package Logistics_Module is
          Selected_Cover_Sum (Selected) * Premium_Factor (Hazard, Mode);
 
    -- Cargo/body/mode matrix (see README)
+   --  Body × mode gate for a cargo class (does not move freight).
+   --  Lowboy_Cargo pattern (same shape as Silo/Tank):
+   --    Road|Tunnel  => Equip must be Lowboy
+   --    Rail|Sea     => True for any Equip (mode owns the deck)
+   --    Air|Space_Haul => False
    function Compatible
      (Cargo : Cargo_Class;
       Equip : Body_Kind;

@@ -51,6 +51,14 @@ begin
    Check (Compatible (Container_Cargo, Container, Space_Haul), "container space_haul");
    Check (not Compatible (Flatbed_Cargo, Flatbed, Space_Haul), "flatbed not space_haul");
 
+   -- Lowboy_Cargo: road/tunnel need Lowboy body; rail/sea any Equip; air/space refuse
+   Check (Compatible (Lowboy_Cargo, Lowboy, Road), "lowboy road");
+   Check (not Compatible (Lowboy_Cargo, Flatbed, Road), "lowboy not flatbed road");
+   Check (Compatible (Lowboy_Cargo, Flatbed, Rail), "lowboy rail any equip");
+   Check (Compatible (Lowboy_Cargo, Dry_Box, Sea), "lowboy sea any equip");
+   Check (not Compatible (Lowboy_Cargo, Lowboy, Air), "lowboy not air");
+   Check (not Compatible (Lowboy_Cargo, Lowboy, Space_Haul), "lowboy not space_haul");
+
    Check (Mode_Allows_Hazard (Road, Explosives), "road allows explosives");
    Check (not Mode_Allows_Hazard (Air, Explosives), "air denies explosives");
    Check (not Mode_Allows_Hazard (Space_Haul, Radioactive), "space_haul denies radioactive");

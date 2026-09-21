@@ -34,6 +34,47 @@ package body Logistics_Module.Demand_Cells is
       return P.Cruise_Speed_m_s;
    end Cruise_Speed_m_s;
 
+   function Effective_Cargo_Mass_kg
+     (S : Fleet_Species; World : World_Body) return Float
+   is
+      pragma Unreferenced (World);
+   begin
+      -- World derating is deliberately left as a later exercise: this
+      -- table keeps the profile payload stable while exposing the seam.
+      return Profile_Of (S).Cargo_Mass_kg;
+   end Effective_Cargo_Mass_kg;
+
+   function Cost_Factor
+     (S : Fleet_Species; World : World_Body) return Float
+   is
+   begin
+      case S is
+         when Barge_Inner =>
+            case World is
+               when Terra_0 | Moon_Polar => return 1.0;
+               when Mars                  => return 1.5;
+               when Titan                 => return 2.0;
+               when Venus_Cloud_Port      => return 1.3;
+            end case;
+         when Fast_Courier =>
+            case World is
+               when Terra_0                => return 0.8;
+               when Moon_Polar              => return 1.0;
+               when Mars                    => return 1.8;
+               when Titan                   => return 2.5;
+               when Venus_Cloud_Port        => return 1.4;
+            end case;
+         when Relativistic_Stub =>
+            case World is
+               when Terra_0                => return 2.0;
+               when Moon_Polar              => return 3.0;
+               when Mars                    => return 5.0;
+               when Titan                   => return 6.0;
+               when Venus_Cloud_Port        => return 4.0;
+            end case;
+      end case;
+   end Cost_Factor;
+
    function Demand_Rate_kg_s
      (Crew              : Natural;
       Kg_Per_Person_Day : Float := Consumables_kg_person_day) return Float

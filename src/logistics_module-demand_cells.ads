@@ -20,6 +20,10 @@ package Logistics_Module.Demand_Cells is
    ------------------------------------------------------------------
    type Fleet_Species is (Barge_Inner, Fast_Courier, Relativistic_Stub);
 
+   -- Educational naming alias: fleet species are the current Ship_Class
+   -- concepts; the legacy Fleet_Species name remains source-compatible.
+   subtype Ship_Class is Fleet_Species;
+
    type Species_Profile is record
       Cruise_Speed_m_s : Float;
       Cargo_Mass_kg    : Float;
@@ -49,6 +53,24 @@ package Logistics_Module.Demand_Cells is
    function Cruise_Speed_m_s (S : Fleet_Species) return Float
    with
      Post => Cruise_Speed_m_s'Result < Float (c_m_s);
+
+   ------------------------------------------------------------------
+   -- Per-world capacity and haul-cost lookup (thin educational table).
+   -- This parallel API intentionally does not change legacy Score/Reward.
+   ------------------------------------------------------------------
+   function Effective_Cargo_Mass_kg
+     (S : Fleet_Species; World : World_Body) return Float
+   with
+     Post => Effective_Cargo_Mass_kg'Result >= 0.0;
+
+   function Cargo_Capacity_kg
+     (S : Fleet_Species; World : World_Body) return Float
+     renames Effective_Cargo_Mass_kg;
+
+   function Cost_Factor
+     (S : Fleet_Species; World : World_Body) return Float
+   with
+     Post => Cost_Factor'Result > 0.0;
 
    -- Haul_Mode cruise (Space_Haul = Barge_Inner 3000)
    function Cruise_Speed_m_s (Mode : Haul_Mode) return Float

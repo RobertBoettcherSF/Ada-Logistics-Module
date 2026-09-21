@@ -119,6 +119,21 @@ This is an educational simulation, not GDP/pharmacy validation.
 
 Pad_Reconcrete: landing Mass/GVW > Pad_Limit_kg → Cracked; Space_Haul blocked until Reconcrete_Hours (Tick advances repair).
 
+## Warehouse + Stock (educational SI)
+
+`Logistics_Module.Warehouses` models a hub inventory separately from
+`Demand_Cell.Stock_kg`. `Mass_kg` and `Capacity_kg` are kilograms (SI). A
+registry is bounded to 16 warehouses; each warehouse has up to 16 cargo-class
+slots. `Create_Warehouse`, `Deposit`, `Withdraw`, and `Stock_Of` reject invalid
+IDs, non-positive moves, over-capacity deposits, and full slot sets.
+
+| Field | Meaning |
+|-------|---------|
+| `Mass_kg` | stored cargo mass in kilograms |
+| `Capacity_kg` | warehouse aggregate mass limit in kilograms |
+| `Warehouse_Location` | `World_Body` plus `City_Id` / `Spaceport_Id` tags |
+| `Hold_Temp_C` | optional educational last temperature for a stock slot (°C) |
+
 ## Demand_Cells (evolutionary fleet, DS SI)
 
 | Constant | Value |
@@ -132,6 +147,23 @@ Pad_Reconcrete: landing Mass/GVW > Pad_Limit_kg → Cracked; Space_Haul blocked 
 | Barge_Inner | 3000 | 1_045_000 | 1_900_000 |
 | Fast_Courier | 30_000 | 50_000 | 100_000 |
 | Relativistic_Stub | β·c (β≤0.01) | 1000 | 5000 |
+
+`Ship_Class` is the educational alias for the existing `Fleet_Species` type.
+World lookup functions retain profile cargo as effective capacity in this thin
+stub; they expose the future derating seam without changing tournament math.
+
+| Ship_Class | Terra_0 | Moon_Polar | Mars | Titan | Venus_Cloud_Port |
+|------------|---------|------------|------|-------|-------------------|
+| Barge_Inner cargo (kg) | 1,045,000 | 1,045,000 | 1,045,000 | 1,045,000 | 1,045,000 |
+| Fast_Courier cargo (kg) | 50,000 | 50,000 | 50,000 | 50,000 | 50,000 |
+| Relativistic_Stub cargo (kg) | 1,000 | 1,000 | 1,000 | 1,000 | 1,000 |
+| Barge_Inner cost factor | 1.0 | 1.0 | 1.5 | 2.0 | 1.3 |
+| Fast_Courier cost factor | 0.8 | 1.0 | 1.8 | 2.5 | 1.4 |
+| Relativistic_Stub cost factor | 2.0 | 3.0 | 5.0 | 6.0 | 4.0 |
+
+`Cargo_Capacity_kg (S, World)` is the effective payload and
+`Cost_Factor (S, World)` is a positive money/effort multiplier. The lookup is
+parallel to `Score_kg_s` / `Reward_Coin`; those legacy formulas remain stable.
 
 Pre: `Cruise_Speed_m_s < c_m_s`.
 

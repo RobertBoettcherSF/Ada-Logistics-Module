@@ -117,6 +117,34 @@ Evolutionary fleet (DS SI): `c_m_s`, `AU_m`; species `Barge_Inner` /
 `Fast_Courier` / `Relativistic_Stub` (β≤0.01); cruise &lt; c; Fitness =
 Throughput/(ships×gross); `Life_Tick` spawn/prefer/cull by Fitness; appends `sim_run.csv` (cell×species SI rows).
 
+### Warehouse + Stock (child package)
+
+`Logistics_Module.Warehouses` is a bounded educational hub inventory. A
+`Warehouse_Registry` holds at most `Max_Warehouses = 16` warehouses, each with
+up to 16 simple cargo-class slots and an SI `Capacity_kg`. `Warehouse_Location`
+records a `World_Body`, `City_Id`, and optional `Spaceport_Id`.
+
+Typical flow:
+
+```ada
+Create_Warehouse (Registry, Terra_0, Capacity => 1_000.0, Id => W, Success => Ok);
+Deposit (Registry, W, Dry_Box_Cargo, 600.0, Ok);
+Withdraw (Registry, W, Dry_Box_Cargo, 100.0, Ok);
+Remaining := Remaining_Capacity_kg (Registry, W);
+```
+
+`Stock_Of` reports a SKU or total stock; deposits that exceed capacity, use an
+unknown warehouse, or exhaust the 16 slots are rejected. A small default
+registry also exposes the same operations without a company object for demos.
+
+### Ship_Class per-world capacity/cost
+
+Demand_Cells keeps `Fleet_Species` as the compatible legacy name and exposes
+`Ship_Class` as an alias. `Cargo_Capacity_kg` / `Effective_Cargo_Mass_kg` and
+`Cost_Factor` provide a parallel, non-breaking world lookup. Existing
+`Score_kg_s` and `Reward_Coin` formulas are unchanged. See
+[Physical_Data.md](Physical_Data.md) for the lean table.
+
 ### ATC (child package) — separate from Fitness
 
 Lean air/space traffic control SI (not mixed with evolutionary Fitness):

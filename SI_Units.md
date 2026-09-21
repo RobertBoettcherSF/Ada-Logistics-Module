@@ -51,3 +51,9 @@ band is checked on every logistics `Tick` after time advances. Values outside
 the band produce `Cold_Chain_Failed`; no automatic temperature drift occurs
 unless a demo explicitly sets `Set_Hold_Temp_Drift`. This is educational SI,
 not GDP or pharmacy validation.
+
+
+## Warehouse stock
+
+New warehouse APIs use `Mass_kg` and `Capacity_kg` for cargo mass and storage
+capacity in kilograms. `Hold_Temp_C` is an optional slot reading in °C.

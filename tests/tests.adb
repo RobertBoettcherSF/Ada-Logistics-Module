@@ -8,6 +8,8 @@ with Ada.Strings.Fixed;
 with Logistics_Module; use Logistics_Module;
 with Logistics_Module.Demand_Cells;
 use Logistics_Module.Demand_Cells;
+with Logistics_Module.Warehouses;
+use Logistics_Module.Warehouses;
 with Logistics_Module.ATC;
 use Logistics_Module.ATC;
 
@@ -1363,6 +1365,40 @@ begin
              "sim_run logs Score_kg_s,Reward_Coin");
       Check (Found_Fuel and then Found_Pay,
              "sim_run logs Fuel_Mass_kg,Payload_Net_kg");
+   end;
+
+   ------------------------------------------------------------------
+   -- Thin Warehouse + Stock and per-world Ship_Class tables
+   ------------------------------------------------------------------
+   declare
+      Registry : Warehouse_Registry := Create_Registry;
+      Wid      : Warehouse_Id;
+      Ok_W     : Boolean;
+      Ship     : Ship_Class := Barge_Inner;
+   begin
+      Create_Warehouse (Registry, Terra_0, Capacity => 1_000.0,
+                        Id => Wid, Success => Ok_W);
+      Check (Ok_W and then Capacity_kg (Registry, Wid) = 1_000.0,
+             "Terra warehouse created with SI capacity");
+      Deposit (Registry, Wid, Dry_Box_Cargo, 600.0, Ok_W);
+      Check (Ok_W and then Stock_Of (Registry, Wid, Dry_Box_Cargo) = 600.0,
+             "Dry_Box deposited");
+      Deposit (Registry, Wid, Dry_Box_Cargo, 500.0, Ok_W);
+      Check (not Ok_W and then Stock_Of (Registry, Wid) = 600.0,
+             "warehouse rejects over-capacity");
+      Withdraw (Registry, Wid, Dry_Box_Cargo, 100.0, Ok_W);
+      Check (Ok_W and then Stock_Of (Registry, Wid, Dry_Box_Cargo) = 500.0,
+             "Dry_Box withdrawn");
+      Check (Cargo_Capacity_kg (Ship, Terra_0) = Barge_Cargo_Mass_kg
+               and then Cost_Factor (Ship, Moon_Polar) = 1.0
+               and then Cost_Factor (Ship, Mars) = 1.5
+               and then Cost_Factor (Ship, Titan) = 2.0,
+             "Barge Ship_Class world capacity and cost table");
+      Check (Cost_Factor (Fast_Courier, Terra_0)
+               < Cost_Factor (Fast_Courier, Mars)
+               and then Cargo_Capacity_kg (Fast_Courier, Mars)
+                 < Cargo_Capacity_kg (Barge_Inner, Mars),
+             "Fast_Courier long-haul cost and payload table");
    end;
 
    New_Line;

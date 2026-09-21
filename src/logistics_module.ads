@@ -491,6 +491,10 @@ package Logistics_Module is
    function Density_kg_m3_Of (Kind : Cargo_Kind) return Float;
    function Temp_Band_Of (Kind : Cargo_Kind) return Temp_Band_C;
 
+   -- Inclusive educational cold-chain band check. Uncontrolled kinds are OK.
+   function In_Temp_Band
+     (Temp_C : Float; Band : Temp_Band_C) return Boolean;
+
    -- M1 last-mile: Cosmetics / Food_Dry only
    function M1_Last_Mile_Ok (Kind : Cargo_Kind) return Boolean;
 
@@ -523,6 +527,7 @@ package Logistics_Module is
    type Staff_Role is (Dispatcher, Driver, Mechanic, Clerk, Manager);
    type Order_Status is
      (Pending, Accepted, In_Transit, En_Route, Delivered, Cancelled,
+      Cold_Chain_Failed,
       Rejected_ATC);
    type Offer_Status is (Open, Accepted_Offer, Declined, Expired);
 
@@ -572,6 +577,12 @@ package Logistics_Module is
       Elapsed_s         : Float := 0.0;
       Assign_Wall_Time  : Ada.Calendar.Time :=
         Ada.Calendar.Time_Of (1901, 1, 1);
+      -- Educational cold-chain sensor state; temperatures are degrees Celsius.
+      Hold_Temp_C            : Float := 0.0;
+      Has_Temp_Sensor        : Boolean := False;
+      Cold_Chain_Breached    : Boolean := False;
+      Breach_Count           : Natural := 0;
+      Hold_Temp_Drift_C_Per_s : Float := 0.0;
    end record;
 
    type Staff_Record is record
@@ -601,6 +612,9 @@ package Logistics_Module is
    Max_Rail_Slots : constant := 64;
 
    type Company is private;
+
+   -- True for non-controlled orders, or while a controlled order is in band.
+   function Cold_Chain_Ok (C : Company; Order : Order_Id) return Boolean;
 
    function Create_Company
      (Starting_Cash : Money;
@@ -770,6 +784,18 @@ package Logistics_Module is
       Placard     : Placard_Code := Empty_Placard);
 
    function Get_Order (C : Company; Id : Order_Id) return Order_Record;
+
+   -- Inject the latest sensor value (°C) for tests or a future IoT adapter.
+   procedure Sample_Hold_Temp
+     (C      : in out Company;
+      Order  : Order_Id;
+      Temp_C : Float);
+
+   -- Optional demo-only drift; default is zero (stable last sensor sample).
+   procedure Set_Hold_Temp_Drift
+     (C                : in out Company;
+      Order            : Order_Id;
+      Drift_C_Per_s    : Float);
 
    procedure Make_Offer
      (C       : in out Company;

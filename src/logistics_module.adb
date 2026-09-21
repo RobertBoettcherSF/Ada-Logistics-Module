@@ -187,6 +187,14 @@ package body Logistics_Module is
       end case;
    end Temp_Band_Of;
 
+   function In_Temp_Band
+     (Temp_C : Float; Band : Temp_Band_C) return Boolean
+   is
+   begin
+      return not Band.Controlled
+        or else (Temp_C >= Band.Lo_C and then Temp_C <= Band.Hi_C);
+   end In_Temp_Band;
+
    function M1_Last_Mile_Ok (Kind : Cargo_Kind) return Boolean is
    begin
       return Kind = Food_Dry or else Kind = Cosmetics;
@@ -1128,6 +1136,52 @@ package body Logistics_Module is
       return C.Orders (Id);
    end Get_Order;
 
+   function Cold_Chain_Ok (C : Company; Order : Order_Id) return Boolean is
+      O    : Order_Record;
+      Band : Temp_Band_C;
+   begin
+      if Natural (Order) > C.O_Count then
+         return False;
+      end if;
+      O := C.Orders (Order);
+      if not O.Has_Kind then
+         return True;
+      end if;
+      Band := Temp_Band_Of (O.Kind);
+      return not Band.Controlled
+        or else (O.Has_Temp_Sensor
+                and then not O.Cold_Chain_Breached
+                and then In_Temp_Band (O.Hold_Temp_C, Band));
+   end Cold_Chain_Ok;
+
+   procedure Sample_Hold_Temp
+     (C      : in out Company;
+      Order  : Order_Id;
+      Temp_C : Float)
+   is
+   begin
+      if Natural (Order) > C.O_Count then
+         return;
+      end if;
+      if C.Orders (Order).Has_Temp_Sensor then
+         C.Orders (Order).Hold_Temp_C := Temp_C;
+      end if;
+   end Sample_Hold_Temp;
+
+   procedure Set_Hold_Temp_Drift
+     (C             : in out Company;
+      Order         : Order_Id;
+      Drift_C_Per_s : Float)
+   is
+   begin
+      if Natural (Order) > C.O_Count then
+         return;
+      end if;
+      if C.Orders (Order).Has_Temp_Sensor then
+         C.Orders (Order).Hold_Temp_Drift_C_Per_s := Drift_C_Per_s;
+      end if;
+   end Set_Hold_Temp_Drift;
+
    procedure Make_Offer
      (C       : in out Company;
       Order   : Order_Id;
@@ -1346,6 +1400,14 @@ package body Logistics_Module is
       return True;
    end Road_Vehicle_Ok;
 
+   procedure Enable_Cold_Sensor (O : in out Order_Record);
+
+   procedure Release_Breached_Vehicle
+     (C : in out Company; Vehicle : Vehicle_Id; Order : Order_Id);
+
+   procedure Monitor_Cold_Chain
+     (C : in out Company; Sim_Delta_s : Float);
+
    procedure Dispatch_Order
      (C       : in out Company;
       Order   : Order_Id;
@@ -1456,6 +1518,7 @@ package body Logistics_Module is
 
       C.Orders (Order).Status := In_Transit;
       C.Orders (Order).Mode := Mode;
+      Enable_Cold_Sensor (C.Orders (Order));
       Success := True;
    end Dispatch_Order;
 
@@ -1561,6 +1624,69 @@ package body Logistics_Module is
       end if;
    end Mark_Rejected_ATC;
 
+   procedure Enable_Cold_Sensor (O : in out Order_Record) is
+      Band : Temp_Band_C;
+   begin
+      if not O.Has_Kind then
+         return;
+      end if;
+      Band := Temp_Band_Of (O.Kind);
+      if Band.Controlled then
+         O.Hold_Temp_C := (Band.Lo_C + Band.Hi_C) / 2.0;
+         O.Has_Temp_Sensor := True;
+         O.Cold_Chain_Breached := False;
+         O.Breach_Count := 0;
+         O.Hold_Temp_Drift_C_Per_s := 0.0;
+      end if;
+   end Enable_Cold_Sensor;
+
+   procedure Release_Breached_Vehicle
+     (C : in out Company; Vehicle : Vehicle_Id; Order : Order_Id)
+   is
+      V : constant Vehicle_Id := Vehicle;
+   begin
+      if Natural (V) <= C.V_Count
+        and then C.Vehicles (V).Has_Bound
+        and then C.Vehicles (V).Bound_Order = Order
+      then
+         C.Vehicles (V).Available := True;
+         C.Vehicles (V).Phase := Docked;
+         C.Vehicles (V).Dwell_Remaining_s := 0.0;
+         C.Vehicles (V).Has_Bound := False;
+      end if;
+   end Release_Breached_Vehicle;
+
+   procedure Monitor_Cold_Chain
+     (C : in out Company; Sim_Delta_s : Float)
+   is
+      Band : Temp_Band_C;
+      O    : Order_Record;
+   begin
+      if C.O_Count = 0 then
+         return;
+      end if;
+      for I in Order_Id range 1 .. Order_Id (C.O_Count) loop
+         O := C.Orders (I);
+         if O.Status = En_Route and then O.Has_Kind then
+            Band := Temp_Band_Of (O.Kind);
+            if Band.Controlled and then O.Has_Temp_Sensor then
+               -- Drift is opt-in for demos; otherwise the last sample is stable.
+               C.Orders (I).Hold_Temp_C :=
+                 O.Hold_Temp_C + O.Hold_Temp_Drift_C_Per_s * Sim_Delta_s;
+               if not In_Temp_Band (C.Orders (I).Hold_Temp_C, Band) then
+                  if not O.Cold_Chain_Breached then
+                     C.Orders (I).Breach_Count := O.Breach_Count + 1;
+                  end if;
+                  C.Orders (I).Cold_Chain_Breached := True;
+                  C.Orders (I).Status := Cold_Chain_Failed;
+                  Release_Breached_Vehicle
+                    (C, C.Orders (I).Assigned_Vehicle, I);
+               end if;
+            end if;
+         end if;
+      end loop;
+   end Monitor_Cold_Chain;
+
    procedure Assign_Vehicle
      (C          : in out Company;
       Order      : Order_Id;
@@ -1627,6 +1753,7 @@ package body Logistics_Module is
       C.Orders (Order).ETA_s := Compute_ETA_s (Distance_m, Mode);
       C.Orders (Order).Elapsed_s := 0.0;
       C.Orders (Order).Assign_Wall_Time := Now;
+      Enable_Cold_Sensor (C.Orders (Order));
 
       C.Vehicles (Vehicle).Position := C.Cities (O.Origin).Position;
       C.Vehicles (Vehicle).Phase := Underway;
@@ -1710,6 +1837,7 @@ package body Logistics_Module is
       end if;
       Advance_Pad_Repairs (C, Sim_Delta_s);
       Advance_Vehicles (C, Sim_Delta_s);
+      Monitor_Cold_Chain (C, Sim_Delta_s);
       if C.O_Count = 0 then
          return;
       end if;

@@ -1182,6 +1182,68 @@ begin
    end;
 
    ------------------------------------------------------------------
+   -- Continuous cold-chain monitoring (educational SI, not GDP validation)
+   ------------------------------------------------------------------
+   declare
+      Cc          : Company;
+      Ca, Cb      : City_Id;
+      Reefer_V    : Vehicle_Id;
+      Dry_V       : Vehicle_Id;
+      Pharma_1    : Order_Id;
+      Pharma_2    : Order_Id;
+      Dry_Order   : Order_Id;
+      Success     : Boolean;
+      Local_Order : Order_Record;
+   begin
+      Cc := Create_Company (30_000.00);
+      Add_City (Cc, "ColdA", False, False, Id => Ca);
+      Add_City (Cc, "ColdB", False, False, Id => Cb);
+      Add_Vehicle (Cc, Rigid, Reefer, True, 16, 8_000.00, Reefer_V, Success);
+      Add_Vehicle (Cc, Rigid, Dry_Box, True, 16, 8_000.00, Dry_V, Success);
+      Check (Success, "cold-chain fleet seed");
+
+      Create_Order (Cc, Ca, Cb, Pharma_Cold, 2, 200.00, Pharma_1, Success);
+      Assign_Vehicle (Cc, Pharma_1, Reefer_V, 2_200.0, Road, Success);
+      Local_Order := Get_Order (Cc, Pharma_1);
+      Check (Success and then Local_Order.Has_Temp_Sensor
+               and then Local_Order.Hold_Temp_C = 5.0,
+             "Pharma_Cold sensor midpoint 5 C");
+      Sample_Hold_Temp (Cc, Pharma_1, 5.0);
+      Check (Cold_Chain_Ok (Cc, Pharma_1), "mid-band Pharma_Cold is OK");
+      Tick_Delta (Cc, 1.0);
+      Check (Get_Order (Cc, Pharma_1).Status = En_Route,
+             "in-band sample survives Tick");
+
+      Sample_Hold_Temp (Cc, Pharma_1, 1.9);
+      Tick_Delta (Cc, 1.0);
+      Local_Order := Get_Order (Cc, Pharma_1);
+      Check (Local_Order.Status = Cold_Chain_Failed
+               and then Local_Order.Cold_Chain_Breached
+               and then Local_Order.Breach_Count = 1
+               and then not Cold_Chain_Ok (Cc, Pharma_1),
+             "below Pharma_Cold band fails on Tick");
+      Check (Get_Vehicle (Cc, Reefer_V).Available,
+             "cold-chain breach frees vehicle");
+
+      Create_Order (Cc, Ca, Cb, Pharma_Cold, 2, 200.00, Pharma_2, Success);
+      Assign_Vehicle (Cc, Pharma_2, Reefer_V, 2_200.0, Road, Success);
+      Sample_Hold_Temp (Cc, Pharma_2, 8.1);
+      Tick_Delta (Cc, 1.0);
+      Check (Get_Order (Cc, Pharma_2).Status = Cold_Chain_Failed,
+             "above Pharma_Cold band fails on Tick");
+
+      Create_Order (Cc, Ca, Cb, Food_Dry, 2, 100.00, Dry_Order, Success);
+      Assign_Vehicle (Cc, Dry_Order, Dry_V, 2_200.0, Road, Success);
+      Local_Order := Get_Order (Cc, Dry_Order);
+      Check (Success and then not Local_Order.Has_Temp_Sensor
+               and then not Local_Order.Cold_Chain_Breached,
+             "Food_Dry has no sensor requirement");
+      Tick_Delta (Cc, 1.0);
+      Check (Get_Order (Cc, Dry_Order).Status = En_Route,
+             "Food_Dry remains unaffected by cold monitoring");
+   end;
+
+   ------------------------------------------------------------------
    -- Hub Position_m / Distance_m (Terra_0 origin)
    ------------------------------------------------------------------
    declare

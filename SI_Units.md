@@ -41,3 +41,13 @@ Vehicles expose `Position_m` and `Route_From`/`Route_To` in SI metres, with
 `Dwell_Remaining_s`.  `Default_Turnaround_s` controls the post-arrival dock
 dwell; it defaults to zero for legacy compatibility (tests can set
 `Two_Day_Turnaround_s`).
+
+
+## Cold-chain temperature (educational)
+
+`Hold_Temp_C` is the latest simulated sensor reading in degrees Celsius (°C).
+For controlled `Food_Cold` and `Pharma_Cold`, the inclusive `[Lo_C, Hi_C]`
+band is checked on every logistics `Tick` after time advances. Values outside
+the band produce `Cold_Chain_Failed`; no automatic temperature drift occurs
+unless a demo explicitly sets `Set_Hold_Temp_Drift`. This is educational SI,
+not GDP or pharmacy validation.

@@ -25,6 +25,7 @@ Inspired by the public logistics-sim genre only.
 | **Hazard_Premium_Band** | `None`/`Low`/`Mid`/`High`/`Extreme` + `Premium_Factor` |
 | **Cover_Kind** | `Cargo_Loss`, `Hull_Loss`, `Crew_Loss`, `Crew_Sick`, `Emergency_Leave` |
 | **Placard_Code** | 8-char data field (orange-plate style; no graphics) |
+| **Cold-chain** | Controlled `Food_Cold` / `Pharma_Cold` bands sampled in °C each `Tick` |
 
 ### Cargo ↔ mode (`Compatible`)
 
@@ -55,6 +56,17 @@ ends). Step-1 cargo: **Container only**. `Space_Cost_Factor` /
 
 `Tunnel` requires `Has_Tunnel` at both ends. Cargo uses the same EU road fleet
 rules as `Road` (body / FE / ADR). Cities may set lean `Tunnel_Fire_Vent_Risk`.
+
+### Cold-chain monitoring (educational SI)
+
+`Food_Cold` and `Pharma_Cold` are controlled temperature kinds. Assigning a
+cold order enables its sensor and starts `Hold_Temp_C` at the band midpoint in
+°C. `Sample_Hold_Temp` injects the latest reading; `Tick` checks the inclusive
+`[Lo_C, Hi_C]` band after elapsed time advances. An out-of-band reading marks
+the order `Cold_Chain_Failed`, records a breach, and frees its bound vehicle.
+Temperatures remain at the last sample by default; optional demo drift is set
+with `Set_Hold_Temp_Drift`. This is educational SI behavior, not GDP/pharmacy
+validation.
 
 ### Dangerous goods (Step-1)
 

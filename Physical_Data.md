@@ -84,6 +84,19 @@ Extreme mode extras (compose): Space_Haul ×1.5 → **15.0**; Tunnel ×1.2 → *
 
 `Total_Premium_Factor` = sum(selected legs) × `Premium_Factor(Hazard, Mode)`.
 
+## Cold-chain temperature (educational SI)
+
+| Kind | Controlled band (°C) | Sensor start |
+|------|----------------------|--------------|
+| `Food_Cold` | 0..4 | midpoint 2 °C |
+| `Pharma_Cold` | 2..8 | midpoint 5 °C |
+
+`Order_Record.Hold_Temp_C` stores the latest sensor reading. `Sample_Hold_Temp`
+updates it, and each `Tick` checks the inclusive band after time advances.
+Out-of-band readings set `Cold_Chain_Breached` and status `Cold_Chain_Failed`;
+the vehicle is released. The default reading is stable (no automatic drift).
+This is an educational simulation, not GDP/pharmacy validation.
+
 ## Haul speeds (MVP play)
 
 | Haul_Mode | Speed (m/s) |

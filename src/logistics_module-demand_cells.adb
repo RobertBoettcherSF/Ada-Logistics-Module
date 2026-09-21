@@ -340,6 +340,38 @@ package body Logistics_Module.Demand_Cells is
       Success := Bid_Hold_Slot (Cell, Mass_kg, Bid_Amount);
    end Bid_Hold_Slot;
 
+
+   function Can_Buy_Barge return Boolean is
+   begin
+      return Shared_Barge_Market.Pool_Owned < Barge_Pool_Max
+        and then Shared_Barge_Market.Pool_Available > 0
+        and then Shared_Barge_Market.Wealth
+          >= Shared_Barge_Market.Ask_Price;
+   end Can_Buy_Barge;
+
+   procedure Escalate_Under_Served
+     (Cell : in out Demand_Cell;
+      W    : Fleet_Species)
+   is
+      Target : Fleet_Species := W;
+   begin
+      -- When barges cannot be bought (pool max or wealth < ask), spawn the
+      -- fitness-best class for this distance (never another barge) so long
+      -- runs keep climbing toward service instead of freezing.
+      if Cell.Distance_m > 0.0 then
+         Target := Best_Species (Cell.Distance_m);
+      end if;
+      if Target = Barge_Inner then
+         if W = Relativistic_Stub then
+            Target := Relativistic_Stub;
+         else
+            Target := Fast_Courier;
+         end if;
+      end if;
+      Cell.Fleet (Target) := Cell.Fleet (Target) + 1;
+      Cell.Preferred := Target;
+   end Escalate_Under_Served;
+
    procedure Try_Barge_Bid (Cell : in out Demand_Cell) is
    begin
       if Bid_For_Barge (Cell, Shared_Barge_Market.Ask_Price) then
@@ -786,8 +818,13 @@ package body Logistics_Module.Demand_Cells is
             if not Try_Hold_Bid (Cell) then
                if Best = Barge_Inner then
                   -- Barges are scarce capital: only a successful market bid may
-                  -- add one.  Other species keep the old educational spawn path.
-                  Try_Barge_Bid (Cell);
+                  -- add one.  If the market cannot clear ask (or the pool is
+                  -- exhausted), escalate to faster classes.
+                  if Can_Buy_Barge then
+                     Try_Barge_Bid (Cell);
+                  else
+                     Escalate_Under_Served (Cell, Best);
+                  end if;
                else
                   Cell.Fleet (Best) := Cell.Fleet (Best) + 1;
                end if;
@@ -922,23 +959,14 @@ package body Logistics_Module.Demand_Cells is
                -- Bias spawn to max Score/Reward winners (Fitness formula untouched).
                Cell.Preferred := W;
                if not Try_Hold_Bid (Cell) then
-                  if Shared_Barge_Market.Pool_Owned < Barge_Pool_Max then
-                     if W = Barge_Inner then
-                        Try_Barge_Bid (Cell);
-                     else
-                        Cell.Fleet (W) := Cell.Fleet (W) + 1;
-                     end if;
+                  if Can_Buy_Barge and then W = Barge_Inner then
+                     Try_Barge_Bid (Cell);
+                  elsif Can_Buy_Barge then
+                     Cell.Fleet (W) := Cell.Fleet (W) + 1;
                   else
-                     -- Barge pool exhausted: escalate to faster classes so
-                     -- long runs keep changing the mix while still under-served.
-                     if W = Barge_Inner or else W = Fast_Courier then
-                        Cell.Fleet (Fast_Courier) :=
-                          Cell.Fleet (Fast_Courier) + 1;
-                        Cell.Preferred := Fast_Courier;
-                     else
-                        Cell.Fleet (W) := Cell.Fleet (W) + 1;
-                        Cell.Preferred := W;
-                     end if;
+                     -- Pool maxed or wealth < ask: escalate so long runs do
+                     -- not freeze on barges alone while still under-served.
+                     Escalate_Under_Served (Cell, W);
                   end if;
                end if;
             elsif Over_Served (Cell) then

@@ -104,16 +104,14 @@ procedure Play is
                 & " kg remaining="
                 & Remaining_Hold_kg (Current_Barge_Market)'Image
                 & " kg");
-      if Current_Barge_Market.Pool_Available = 0
-        and then Under_Served (Demo_Cell)
+      if Under_Served (Demo_Cell)
+        and then (Current_Barge_Market.Pool_Available = 0
+                    or else Current_Barge_Market.Wealth
+                      < Current_Barge_Market.Ask_Price)
       then
          Put_Line
-           ("  note: barge pool maxed — further ticks escalate to couriers/stubs");
-      elsif Current_Barge_Market.Wealth < Current_Barge_Market.Ask_Price
-        and then Under_Served (Demo_Cell)
-      then
-         Put_Line
-           ("  stalled: under-served but wealth < ask (need income/generation)");
+           ("  note: cannot buy barges (pool max or wealth < ask) — "
+            & "ticks escalate to couriers/stubs");
       end if;
       for S in Fleet_Species loop
          Put ("  " & S'Image

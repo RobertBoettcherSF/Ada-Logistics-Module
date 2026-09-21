@@ -889,6 +889,28 @@ package body Logistics_Module.Demand_Cells is
          if Cell.Distance_m > 0.0 then
             Accrue_Rewards (State, Cell.Distance_m);
             W := Tournament_Winner (State, Cell.Distance_m);
+            --  Haul income: this tick's Reward_Coin only (not cumulative State).
+            declare
+               Income : Float := 0.0;
+               Ref    : constant Float := State.Score_Ref_kg_s;
+            begin
+               if Ref > 0.0 then
+                  for S in Fleet_Species loop
+                     Income := Income
+                       + Reward_Coin (S, Cell.Distance_m, Ref);
+                  end loop;
+               end if;
+               -- Scale: dimensionless reward → market coin via ask.
+               if Income > 0.0 then
+                  Shared_Barge_Market.Wealth :=
+                    Shared_Barge_Market.Wealth
+                      + Income * 0.05 * Shared_Barge_Market.Ask_Price;
+               end if;
+            end;
+            -- Soft generation handoff every 500 ticks (genes + wealth carry).
+            if I mod 500 = 0 then
+               End_Generation (Shared_Barge_Market);
+            end if;
          else
             W := Cell.Preferred;
          end if;

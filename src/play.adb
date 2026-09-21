@@ -97,7 +97,14 @@ procedure Play is
                 & Current_Barge_Market.Pool_Owned'Image
                 & " available=" & Current_Barge_Market.Pool_Available'Image
                 & " wealth=" & Current_Barge_Market.Wealth'Image
+                & " ask=" & Current_Barge_Market.Ask_Price'Image
                 & " generation=" & Current_Barge_Market.Generation'Image);
+      if Current_Barge_Market.Wealth < Current_Barge_Market.Ask_Price
+        and then Under_Served (Demo_Cell)
+      then
+         Put_Line
+           ("  stalled: under-served but wealth < ask (need income/generation)");
+      end if;
       for S in Fleet_Species loop
          Put ("  " & S'Image
               & " n=" & Demo_Cell.Fleet (S)'Image

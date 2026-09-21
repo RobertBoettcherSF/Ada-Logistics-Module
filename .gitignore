@@ -1,3 +1,6 @@
 obj/
+bin/
+*.o
+*.ali
 sim_run.csv
-obj/sim_run_test.csv
+sim_run_test.csv
